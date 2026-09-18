@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="GX2 Bridge v0.3.0 - Mitsubishi GX Works 2 Simulator Network Bridge by Ismail Lowkey" 
+        Title="GX2 Bridge v0.3.2 - Mitsubishi GX Works 2 Simulator Network Bridge by Ismail Lowkey" 
         Icon="pack://application:,,,/Resources/app_icon.ico"
         Height="700" Width="1100"
         WindowStartupLocation="CenterScreen"
@@ -96,12 +96,40 @@
             </MenuItem>
             <MenuItem Header="_View">
                 <MenuItem Header="Toggle Inspector &amp; Log Tab" Click="MenuToggleLog_Click" />
+                <MenuItem Header="What's New" Click="MenuWhatsNew_Click" />
             </MenuItem>
+            <MenuItem Header="🔄 Check for Updates" Click="MenuCheckUpdate_Click" FontWeight="SemiBold" Foreground="#0284C7"/>
+            <MenuItem Header="✨ What's New" Click="MenuWhatsNew_Click" FontWeight="SemiBold" Foreground="#2563EB"/>
             <MenuItem Header="_Help">
                 <MenuItem Header="📖 User Guide" Click="MenuGuide_Click" />
+                <MenuItem Header="✨ What's New" Click="MenuWhatsNew_Click" />
+                <MenuItem Header="🔄 Check for Updates..." Click="MenuCheckUpdate_Click" />
+                <Separator/>
                 <MenuItem Header="ℹ About GX2 Bridge" Click="MenuAbout_Click" />
             </MenuItem>
         </Menu>
+
+        <!-- Bottom Status Bar -->
+        <Border DockPanel.Dock="Bottom" Background="#FFFFFF" BorderBrush="#E2E8F0" BorderThickness="0,1,0,0" Padding="14,6">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Left: Application Info -->
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="GX2 Bridge v0.3.2" FontSize="11" FontWeight="SemiBold" Foreground="#64748B"/>
+                    <TextBlock Text=" • Mitsubishi GX Works 2 Network Bridge" FontSize="11" Foreground="#94A3B8" Margin="4,0,0,0"/>
+                </StackPanel>
+
+                <!-- Right: Auto Update Status -->
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Cursor="Hand" MouseLeftButtonUp="MenuCheckUpdate_Click" ToolTip="Click to check for updates">
+                    <Ellipse x:Name="UpdateStatusLed" Width="7" Height="7" Fill="#94A3B8" Margin="0,0,6,0" VerticalAlignment="Center"/>
+                    <TextBlock x:Name="TxtUpdateStatus" Text="Checking for updates..." FontSize="11" FontWeight="SemiBold" Foreground="#64748B" VerticalAlignment="Center"/>
+                </StackPanel>
+            </Grid>
+        </Border>
 
         <!-- Main Workspace -->
         <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -123,7 +151,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="GX2 Bridge" FontSize="22" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,10,0"/>
                                         <Border Background="#E0F2FE" CornerRadius="6" Padding="8,2" VerticalAlignment="Center" Margin="0,0,6,0">
-                                            <TextBlock Text="v0.3.0" FontSize="11" FontWeight="Bold" Foreground="#0369A1" />
+                                            <TextBlock Text="v0.3.2" FontSize="11" FontWeight="Bold" Foreground="#0369A1" />
                                         </Border>
                                         <Border Background="#F1F5F9" CornerRadius="6" Padding="8,2" VerticalAlignment="Center" Margin="0,0,6,0">
                                             <TextBlock Text="by Ismail Lowkey" FontSize="11" FontWeight="SemiBold" Foreground="#475569" />
@@ -146,6 +174,12 @@
                                     </StackPanel>
                                 </Border>
 
+                                <!-- Check for Updates Button -->
+                                <Button Content="🔄 Check for Updates" Margin="10,0,0,0" Height="30" Padding="12,4"
+                                        Background="#0284C7" Foreground="White" FontWeight="Bold" FontSize="11"
+                                        ToolTip="Check for newer versions on GitHub"
+                                        Style="{StaticResource ModernButton}" Click="MenuCheckUpdate_Click"/>
+
                                 <!-- Exit GX Simulator 2 Button -->
                                 <Button x:Name="BtnExitGxSim" Content="Exit GX Simulator 2" Margin="10,0,0,0" Height="30" Padding="12,4"
                                         Background="#DC2626" Foreground="White" FontWeight="Bold" FontSize="11"
@@ -160,7 +194,7 @@
                         <Grid>
                             <Grid.ColumnDefinitions>
                                 <!-- Left side: MC Servers configuration -->
-                                <ColumnDefinition Width="Auto" MinWidth="470"/>
+                                <ColumnDefinition Width="Auto" MinWidth="360"/>
                                 <!-- Divider -->
                                 <ColumnDefinition Width="28"/>
                                 <!-- Right side: Architecture flow diagram -->
@@ -171,7 +205,7 @@
                             <StackPanel Grid.Column="0">
                                 <TextBlock Text="MC PROTOCOL SERVERS" FontSize="11" FontWeight="Bold" Foreground="#0284C7" Margin="0,0,0,10"/>
 
-                                <!-- Server 1 (Top): MC Binary TCP Server - Default Port 5000 (Started by default) -->
+                                <!-- Server 1 (Top): MC Binary TCP/UDP Server - Default Port 5000 (Started by default) -->
                                 <Grid Margin="0,0,0,8">
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -179,20 +213,18 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="75"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
                                     <Ellipse x:Name="Server1Led" Width="10" Height="10" Fill="#22C55E" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="MC Binary TCP Server:" FontSize="12.5" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center" Grid.Column="1"/>
+                                    <TextBlock Text="MC Protocol (TCP/UDP):" FontSize="12.5" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center" Grid.Column="1"/>
                                     <TextBlock Text="Port:" FontSize="11.5" Foreground="#64748B" Margin="0,0,6,0" VerticalAlignment="Center" Grid.Column="2"/>
                                     <TextBox x:Name="TxtPortServer1" Text="5000" FontSize="12" FontWeight="SemiBold" Padding="4,3" VerticalAlignment="Center" Grid.Column="3" TextAlignment="Center" BorderBrush="#CBD5E1" IsEnabled="False"/>
                                     <Button x:Name="BtnToggleServer1" Content="Stop" Width="64" Height="26" Margin="10,0,0,0" Grid.Column="4" Style="{StaticResource ModernButton}" Click="BtnToggleServer1_Click"/>
-                                    <TextBlock x:Name="TxtStatusServer1" Text="Running on Port 5000" FontSize="11.5" Foreground="#16A34A" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" Grid.Column="5"/>
                                 </Grid>
 
                                 <Separator Background="#F1F5F9" Margin="0,2,0,8"/>
 
-                                <!-- Server 2 (Bottom): MC Binary TCP Server - Default Port 6000 (Stopped by default) -->
+                                <!-- Server 2 (Bottom): MC Binary TCP/UDP Server - Default Port 6000 (Stopped by default) -->
                                 <Grid>
                                     <Grid.ColumnDefinitions>
                                         <ColumnDefinition Width="Auto"/>
@@ -200,15 +232,13 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="75"/>
                                         <ColumnDefinition Width="Auto"/>
-                                        <ColumnDefinition Width="*"/>
                                     </Grid.ColumnDefinitions>
 
                                     <Ellipse x:Name="Server2Led" Width="10" Height="10" Fill="#94A3B8" Margin="0,0,10,0" VerticalAlignment="Center"/>
-                                    <TextBlock Text="MC Binary TCP Server:" FontSize="12.5" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center" Grid.Column="1"/>
+                                    <TextBlock Text="MC Protocol (TCP/UDP):" FontSize="12.5" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center" Grid.Column="1"/>
                                     <TextBlock Text="Port:" FontSize="11.5" Foreground="#64748B" Margin="0,0,6,0" VerticalAlignment="Center" Grid.Column="2"/>
                                     <TextBox x:Name="TxtPortServer2" Text="6000" FontSize="12" FontWeight="SemiBold" Padding="4,3" VerticalAlignment="Center" Grid.Column="3" TextAlignment="Center" BorderBrush="#CBD5E1" IsEnabled="True"/>
                                     <Button x:Name="BtnToggleServer2" Content="Start" Width="64" Height="26" Margin="10,0,0,0" Grid.Column="4" Style="{StaticResource ModernButton}" Click="BtnToggleServer2_Click"/>
-                                    <TextBlock x:Name="TxtStatusServer2" Text="Stopped" FontSize="11.5" Foreground="#64748B" FontWeight="SemiBold" Margin="12,0,0,0" VerticalAlignment="Center" Grid.Column="5"/>
                                 </Grid>
                             </StackPanel>
 
@@ -245,7 +275,7 @@
                                     <!-- Arrow to Clients -->
                                     <StackPanel VerticalAlignment="Center" Margin="8,0">
                                         <TextBlock Text="⇄" FontSize="18" FontWeight="Bold" Foreground="#0284C7" HorizontalAlignment="Center"/>
-                                        <TextBlock Text="TCP" FontSize="8.5" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center"/>
+                                        <TextBlock Text="TCP / UDP" FontSize="8.5" FontWeight="Bold" Foreground="#64748B" HorizontalAlignment="Center"/>
                                     </StackPanel>
 
                                     <!-- Right: SCADA, OPC, Node-RED, HMI -->
@@ -269,7 +299,7 @@
                     </Border>
 
                     <!-- Main Tabs -->
-                    <TabControl Background="Transparent" BorderThickness="0">
+                    <TabControl x:Name="MainTabControl" Background="Transparent" BorderThickness="0">
                         <!-- TAB 1: I/O RACK (Inputs X0-X7 & Outputs Y0-Y7) -->
                         <TabItem Header="I/O Rack (X0 - X7 &amp; Y0 - Y7)" Style="{StaticResource ModernTabItem}">
                             <StackPanel Margin="0,12,0,0">
@@ -375,6 +405,120 @@
                                     </Grid>
                                 </Border>
                             </Grid>
+                        </TabItem>
+
+                        <!-- TAB 3: WHAT'S NEW -->
+                        <TabItem x:Name="TabWhatsNew" Style="{StaticResource ModernTabItem}">
+                            <TabItem.Header>
+                                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                    <Border Width="7" Height="7" CornerRadius="3.5" Background="#2563EB" Margin="0,0,7,0"/>
+                                    <TextBlock Text="What's New" FontWeight="Bold"/>
+                                </StackPanel>
+                            </TabItem.Header>
+
+                            <StackPanel Margin="0,12,0,0">
+                                <!-- Top Banner Card -->
+                                <Border Background="#FFFFFF" CornerRadius="12" Padding="20,16" Margin="0,0,0,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+                                        <StackPanel VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal">
+                                                <TextBlock Text="Release Notes &amp; Changelog" FontSize="16" FontWeight="Bold" Foreground="#0F172A"/>
+                                                <Border Background="#E0F2FE" CornerRadius="6" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="Latest: v0.3.2" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="Discover new features, protocol enhancements, and performance optimizations in GX2 Bridge." FontSize="12" Foreground="#64748B" Margin="0,3,0,0"/>
+                                        </StackPanel>
+                                        <Button Grid.Column="1" Content="🌐 View Releases on GitHub" Style="{StaticResource ModernButton}" Background="#0F172A" Padding="14,6" FontSize="11" VerticalAlignment="Center" Click="BtnViewReleasesGithub_Click"/>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Version 0.3.2 Card -->
+                                <Border Background="#FFFFFF" CornerRadius="12" Padding="20" Margin="0,0,0,12" BorderBrush="#BAE6FD" BorderThickness="1.5">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,12">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="#0284C7" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="v0.3.2" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                                </Border>
+                                                <TextBlock Text="MC Protocol UDP Support &amp; Background Auto-Update" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                                <Border Background="#ECFDF5" CornerRadius="6" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
+                                                    <TextBlock Text="CURRENT" FontWeight="Bold" FontSize="10.5" Foreground="#059669"/>
+                                                </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="September 2026" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="⚡ Dual-Protocol MC Server (TCP &amp; UDP Simultaneous)" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Both servers now listen on TCP and UDP simultaneously on the exact same port. HMIs configured for UDP (such as Weintek EasyBuilder Pro, GT Designer, SCADA) connect and exchange frames without timeout or 'PLC not responding'." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🔄 Background Auto-Update System &amp; Status Bar Indicator" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Checks GitHub releases silently on application startup. If a newer version is found, an interactive update prompt is shown. The bottom-right status bar displays real-time update status ('No update available' or 'Update available')." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="✍️ MC Protocol Random Write Support (Command 0x1402)" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Added full support for Command 0x1402 (scattered bit and word/dword writes), ensuring seamless compatibility with HMI pushbuttons, toggles, and numeric data entry fields." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🛡️ Proactive Port Conflict Detection" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Automatically probes TCP and UDP ports at startup and manual start; increments to the next free port automatically if a conflict is detected." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Version 0.3.0 Card -->
+                                <Border Background="#FFFFFF" CornerRadius="12" Padding="20" Margin="0,0,0,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,12">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="#64748B" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="v0.3.0" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                                </Border>
+                                                <TextBlock Text="Memory Mirror Engine &amp; Modern Industrial Dashboard" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock Text="September 2026" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🚀 High-Speed PlcMemoryMirror Architecture" FontWeight="Bold" FontSize="12.5" Foreground="#334155" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Optimized STA COM caching engine allowing high-frequency batch reads with sub-millisecond response times and zero GUI freeze." FontSize="11.5" Foreground="#475569" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🎛️ Digital I/O Rack &amp; Traffic Inspector" FontWeight="Bold" FontSize="12.5" Foreground="#334155" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Real-time X0-X7 input toggle switches, Y0-Y7 output glow lamps, register inspector, and live protocol packet logging." FontSize="11.5" Foreground="#475569" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🛑 GX Simulator 2 Process Cleaner" FontWeight="Bold" FontSize="12.5" Foreground="#334155" Margin="0,0,0,4"/>
+                                                <TextBlock Text="One-click termination for lingering SimManager.exe and IOSystem.exe processes without needing Task Manager." FontSize="11.5" Foreground="#475569" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+                            </StackPanel>
                         </TabItem>
                     </TabControl>
                 </StackPanel>

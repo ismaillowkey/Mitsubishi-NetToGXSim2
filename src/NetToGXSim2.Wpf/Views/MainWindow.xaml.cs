@@ -4,11 +4,13 @@ using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
+using System.Windows.Input;
 using System.Windows.Media;
 using System.Windows.Media.Effects;
 using System.Windows.Shapes;
 using System.Windows.Threading;
 using NetToGXSim2.Core;
+using NetToGXSim2.Wpf.Services;
 
 namespace NetToGXSim2.Wpf.Views
 {
@@ -81,7 +83,61 @@ namespace NetToGXSim2.Wpf.Views
             _pollTimer.Tick += PollTimer_Tick;
             _pollTimer.Start();
 
-            Log($"GX2 Bridge ready. Server 1 on port {_mcServer1.Port}.");
+            // Auto-check for updates in background on startup
+            Task.Run(async () =>
+            {
+                await Task.Delay(2000);
+                var result = await UpdateCheckerService.CheckForUpdatesAsync();
+                Dispatcher.Invoke(() =>
+                {
+                    if (result.Success)
+                    {
+                        if (result.HasUpdate)
+                        {
+                            TxtUpdateStatus.Text = $"Update available ({result.LatestVersion})";
+                            TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+                            UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+
+                            var answer = MessageBox.Show(
+                                $"A new version of GX2 Bridge is available!\n\n" +
+                                $"Current Version: v{UpdateCheckerService.CurrentVersion}\n" +
+                                $"Latest Version: {result.LatestVersion}\n\n" +
+                                $"Would you like to open the download page to update now?",
+                                "Update Available - GX2 Bridge",
+                                MessageBoxButton.YesNo,
+                                MessageBoxImage.Information);
+
+                            if (answer == MessageBoxResult.Yes)
+                            {
+                                try
+                                {
+                                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                    {
+                                        FileName = result.ReleaseUrl,
+                                        UseShellExecute = true
+                                    });
+                                }
+                                catch { }
+                            }
+                        }
+                        else
+                        {
+                            TxtUpdateStatus.Text = "No update available";
+                            TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+                            UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+                            Log($"[UPDATE] Application is up to date (v{UpdateCheckerService.CurrentVersion}). No update available.");
+                        }
+                    }
+                    else
+                    {
+                        TxtUpdateStatus.Text = "No update available";
+                        TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+                        UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+                    }
+                });
+            });
+
+            Log($"GX2 Bridge ready. Server 1 on port {_mcServer1.Port} (TCP/UDP).");
         }
 
         private void InitializeInputRack()
@@ -467,8 +523,6 @@ namespace NetToGXSim2.Wpf.Views
             TxtPortServer1.IsEnabled = !_mcServer1.IsRunning;
             BtnToggleServer1.Content = _mcServer1.IsRunning ? "Stop" : "Start";
             Server1Led.Fill = new SolidColorBrush(_mcServer1.IsRunning ? Color.FromRgb(34, 197, 94) : Color.FromRgb(148, 163, 184));
-            TxtStatusServer1.Text = _mcServer1.IsRunning ? $"Running on Port {_mcServer1.Port}" : "Stopped";
-            TxtStatusServer1.Foreground = new SolidColorBrush(_mcServer1.IsRunning ? Color.FromRgb(22, 163, 74) : Color.FromRgb(100, 116, 139));
         }
 
         private void UpdateServer2Ui()
@@ -477,8 +531,6 @@ namespace NetToGXSim2.Wpf.Views
             TxtPortServer2.IsEnabled = !_mcServer2.IsRunning;
             BtnToggleServer2.Content = _mcServer2.IsRunning ? "Stop" : "Start";
             Server2Led.Fill = new SolidColorBrush(_mcServer2.IsRunning ? Color.FromRgb(34, 197, 94) : Color.FromRgb(148, 163, 184));
-            TxtStatusServer2.Text = _mcServer2.IsRunning ? $"Running on Port {_mcServer2.Port}" : "Stopped";
-            TxtStatusServer2.Foreground = new SolidColorBrush(_mcServer2.IsRunning ? Color.FromRgb(22, 163, 74) : Color.FromRgb(100, 116, 139));
         }
 
         private async void BtnExitGxSim_Click(object sender, RoutedEventArgs e)
@@ -570,9 +622,108 @@ namespace NetToGXSim2.Wpf.Views
                 "User Guide", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        private async void MenuCheckUpdate_Click(object sender, RoutedEventArgs e)
+        {
+            Mouse.OverrideCursor = Cursors.Wait;
+            TxtUpdateStatus.Text = "Checking for updates...";
+            TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+            UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(148, 163, 184));
+
+            try
+            {
+                var result = await UpdateCheckerService.CheckForUpdatesAsync();
+                if (result.Success)
+                {
+                    if (result.HasUpdate)
+                    {
+                        TxtUpdateStatus.Text = $"Update available ({result.LatestVersion})";
+                        TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+                        UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(2, 132, 199));
+
+                        var answer = MessageBox.Show(
+                            $"A new version of GX2 Bridge is available!\n\n" +
+                            $"Current Version: v{UpdateCheckerService.CurrentVersion}\n" +
+                            $"Latest Version: {result.LatestVersion}\n\n" +
+                            $"Would you like to open the download page to update now?",
+                            "Update Available - GX2 Bridge",
+                            MessageBoxButton.YesNo,
+                            MessageBoxImage.Information);
+
+                        if (answer == MessageBoxResult.Yes)
+                        {
+                            try
+                            {
+                                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                                {
+                                    FileName = result.ReleaseUrl,
+                                    UseShellExecute = true
+                                });
+                            }
+                            catch { }
+                        }
+                    }
+                    else
+                    {
+                        TxtUpdateStatus.Text = "No update available";
+                        TxtUpdateStatus.Foreground = new SolidColorBrush(Color.FromRgb(100, 116, 139));
+                        UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
+
+                        MessageBox.Show(
+                            $"You are using the latest version of GX2 Bridge (v{UpdateCheckerService.CurrentVersion}).",
+                            "Check for Updates",
+                            MessageBoxButton.OK,
+                            MessageBoxImage.Information);
+                    }
+                }
+                else
+                {
+                    var answer = MessageBox.Show(
+                        $"Unable to check for updates at this time:\n{result.ErrorMessage}\n\nWould you like to open the GitHub releases page manually?",
+                        "Check for Updates",
+                        MessageBoxButton.YesNo,
+                        MessageBoxImage.Warning);
+
+                    if (answer == MessageBoxResult.Yes)
+                    {
+                        try
+                        {
+                            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                            {
+                                FileName = UpdateCheckerService.ReleasesPageUrl,
+                                UseShellExecute = true
+                            });
+                        }
+                        catch { }
+                    }
+                }
+            }
+            finally
+            {
+                Mouse.OverrideCursor = null;
+            }
+        }
+
+        private void MenuWhatsNew_Click(object sender, RoutedEventArgs e)
+        {
+            MainTabControl.SelectedItem = TabWhatsNew;
+        }
+
+        private void BtnViewReleasesGithub_Click(object sender, RoutedEventArgs e)
+        {
+            try
+            {
+                System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                {
+                    FileName = UpdateCheckerService.ReleasesPageUrl,
+                    UseShellExecute = true
+                });
+            }
+            catch { }
+        }
+
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("GX2 Bridge v0.3.0\nMitsubishi GX Works 2 Simulator Network Bridge\n\nDeveloped by Ismail Lowkey", "About GX2 Bridge", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"GX2 Bridge v{UpdateCheckerService.CurrentVersion}\nMitsubishi GX Works 2 Simulator Network Bridge\n\nDeveloped by Ismail Lowkey", "About GX2 Bridge", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         protected override void OnClosed(EventArgs e)

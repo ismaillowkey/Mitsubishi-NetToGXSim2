@@ -60,8 +60,13 @@ scratch/obj/
 *.log
 
 ## Weintek EasyBuilder Pro Backup & Compiled Files
-*.emtp.bak*
+*.bak
+*.bak1
+*.bak2
+*.bak3
+*.bak*
 *.exob
+*.emtp.bak*
 Example Program HMI/Weintek/MCBinaryTCP.emtp.bak1
 Example Program HMI/Weintek/MCBinaryTCP.emtp.bak2
 Example Program HMI/Weintek/MCBinaryTCP.emtp.bak3

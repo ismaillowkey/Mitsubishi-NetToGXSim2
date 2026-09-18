@@ -2,7 +2,7 @@
 setlocal
 
 echo ======================================================================
-echo    GX2 Bridge v0.3.0 - Build ^& Create Installer
+echo    GX2 Bridge v0.3.1 - Build ^& Create Installer
 echo    Developed by: Ismail Lowkey
 echo ======================================================================
 echo.
@@ -51,7 +51,7 @@ if errorlevel 1 (
 echo.
 echo ======================================================================
 echo  [SUCCESS] Installer berhasil dibuat!
-echo  File: Setup_NetToGXSim2_v0.3.0.exe
+echo  File: Setup_NetToGXSim2_v0.3.2.exe
 echo ======================================================================
 echo.
 pause

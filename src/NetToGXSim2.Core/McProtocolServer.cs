@@ -10,18 +10,19 @@ namespace NetToGXSim2.Core
     public class McProtocolServer
     {
         private Socket? _listener;
+        private UdpClient? _udpClient;
         private CancellationTokenSource? _cts;
         private readonly GxSimulatorEngine _engine;
         private readonly List<Socket> _clients = new List<Socket>();
 
-        public string Name { get; set; } = "MC Binary TCP Server";
+        public string Name { get; set; } = "MC Protocol (TCP/UDP)";
         public int Port { get; private set; } = 5000;
         public bool IsRunning { get; private set; }
         public long RequestsProcessed { get; private set; }
 
         public event Action<string>? LogMessage;
 
-        public McProtocolServer(GxSimulatorEngine engine, string name = "MC Binary TCP Server", int defaultPort = 5000)
+        public McProtocolServer(GxSimulatorEngine engine, string name = "MC Protocol (TCP/UDP)", int defaultPort = 5000)
         {
             _engine = engine;
             Name = name;
@@ -48,12 +49,27 @@ namespace NetToGXSim2.Core
                     if (conn.LocalEndPoint.Port == port) return false;
                 }
 
-                // 3. Test binding exclusively
+                // 3. Check active UDP listeners
+                var udpListeners = ipGlobal.GetActiveUdpListeners();
+                foreach (var ep in udpListeners)
+                {
+                    if (ep.Port == port) return false;
+                }
+
+                // 4. Test binding exclusively TCP
                 using (var testSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
                 {
                     testSocket.ExclusiveAddressUse = true;
                     testSocket.Bind(new IPEndPoint(IPAddress.Any, port));
                     testSocket.Close();
+                }
+
+                // 5. Test binding exclusively UDP
+                using (var testUdp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+                {
+                    testUdp.ExclusiveAddressUse = true;
+                    testUdp.Bind(new IPEndPoint(IPAddress.Any, port));
+                    testUdp.Close();
                 }
 
                 return true;
@@ -85,10 +101,24 @@ namespace NetToGXSim2.Core
             {
                 try
                 {
+                    // 1. Start TCP Listener
                     _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                     _listener.ExclusiveAddressUse = true;
                     _listener.Bind(new IPEndPoint(IPAddress.Any, testPort));
                     _listener.Listen(100);
+
+                    // 2. Start UDP Listener on the exact same port
+                    _udpClient = new UdpClient();
+                    _udpClient.ExclusiveAddressUse = true;
+                    _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, testPort));
+
+                    // Fix Windows UDP WSAECONNRESET (10054) issue
+                    try
+                    {
+                        const int SIO_UDP_CONNRESET = -1744830452;
+                        _udpClient.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+                    }
+                    catch { }
 
                     Port = testPort;
                     IsRunning = true;
@@ -96,25 +126,25 @@ namespace NetToGXSim2.Core
 
                     if (testPort != requestedPort)
                     {
-                        LogMessage?.Invoke($"[{Name}] Port {requestedPort} sedang terpakai! Otomatis dinaikkan ke port {Port}.");
+                        LogMessage?.Invoke($"[{Name}] Port {requestedPort} in use! Automatically switched to port {Port}.");
                     }
-                    LogMessage?.Invoke($"[{Name}] Started listening on TCP Port {Port}");
+                    LogMessage?.Invoke($"[{Name}] Started listening on TCP & UDP Port {Port}");
 
                     Task.Run(() => AcceptLoop(_cts.Token));
+                    Task.Run(() => UdpReceiveLoop(_cts.Token));
                     return Port;
                 }
                 catch (SocketException)
                 {
-                    try { _listener?.Close(); } catch { }
-                    _listener = null;
+                    CleanupSockets();
                     testPort = GetNextAvailablePort(testPort + 1);
                 }
                 catch (Exception ex)
                 {
-                    try { _listener?.Close(); } catch { }
-                    _listener = null;
+                    CleanupSockets();
                     IsRunning = false;
                     LogMessage?.Invoke($"[ERROR] {Name} failed to start on port {testPort}: {ex.Message}");
+                    return -1;
                 }
             }
 
@@ -123,13 +153,22 @@ namespace NetToGXSim2.Core
             return -1;
         }
 
+        private void CleanupSockets()
+        {
+            try { _listener?.Close(); } catch { }
+            _listener = null;
+
+            try { _udpClient?.Close(); } catch { }
+            _udpClient = null;
+        }
+
         public void Stop()
         {
             if (!IsRunning) return;
             IsRunning = false;
             _cts?.Cancel();
 
-            try { _listener?.Close(); } catch { }
+            CleanupSockets();
 
             lock (_clients)
             {
@@ -140,9 +179,10 @@ namespace NetToGXSim2.Core
                 _clients.Clear();
             }
 
-            LogMessage?.Invoke("[MC Protocol] Server stopped");
+            LogMessage?.Invoke($"[{Name}] Server stopped (TCP/UDP)");
         }
 
+        #region TCP Handling
         private async Task AcceptLoop(CancellationToken token)
         {
             while (!token.IsCancellationRequested && IsRunning)
@@ -152,7 +192,7 @@ namespace NetToGXSim2.Core
                     if (_listener == null) break;
                     Socket client = await _listener.AcceptAsync();
                     lock (_clients) _clients.Add(client);
-                    LogMessage?.Invoke($"[MC Protocol] Client connected from {client.RemoteEndPoint}");
+                    LogMessage?.Invoke($"[MC Protocol TCP] Client connected from {client.RemoteEndPoint}");
 
                     _ = Task.Run(() => ProcessClient(client, token));
                 }
@@ -179,26 +219,89 @@ namespace NetToGXSim2.Core
                     // 1. QnA 3E Binary (Subheader 0x50 0x00)
                     if (header[0] == 0x50 && header[1] == 0x00)
                     {
-                        ProcessQna3EBinary(client, header);
+                        byte[] hdrRest = new byte[7];
+                        if (!ReadExact(client, hdrRest, 0, 7)) break;
+
+                        byte netNo = hdrRest[0];
+                        byte pcNo = hdrRest[1];
+                        ushort destIo = BitConverter.ToUInt16(hdrRest, 2);
+                        byte destStation = hdrRest[4];
+                        ushort dataLen = BitConverter.ToUInt16(hdrRest, 5);
+
+                        byte[] payload = new byte[dataLen];
+                        if (!ReadExact(client, payload, 0, dataLen)) break;
+
+                        byte[] resp = HandleQna3EBinary(netNo, pcNo, destIo, destStation, payload, "[TCP]");
+                        client.Send(resp);
                     }
-                    // 2. QnA 3E ASCII (Starts with "5000")
+                    // 2. QnA 3E ASCII (Starts with "50")
                     else if (header[0] == 0x35 && header[1] == 0x30)
                     {
-                        ProcessQna3EAscii(client, header);
+                        byte[] subHdrRest = new byte[2];
+                        if (!ReadExact(client, subHdrRest, 0, 2)) break;
+
+                        byte[] hdrAscii = new byte[14];
+                        if (!ReadExact(client, hdrAscii, 0, 14)) break;
+
+                        string sDataLen = System.Text.Encoding.ASCII.GetString(hdrAscii, 10, 4);
+                        int dataLen = Convert.ToInt32(sDataLen, 16);
+
+                        byte[] payloadAscii = new byte[dataLen];
+                        if (!ReadExact(client, payloadAscii, 0, dataLen)) break;
+
+                        string fullAscii = "50" + System.Text.Encoding.ASCII.GetString(subHdrRest) +
+                                           System.Text.Encoding.ASCII.GetString(hdrAscii) +
+                                           System.Text.Encoding.ASCII.GetString(payloadAscii);
+
+                        byte[] resp = HandleQna3EAsciiString(fullAscii, "[TCP]");
+                        client.Send(resp);
                     }
                     // 3. A-1E Binary (Subcommand 0x00 to 0x03)
                     else if (header[0] <= 0x03)
                     {
-                        ProcessA1EBinary(client, header);
+                        byte subCommand = header[0];
+                        byte pcNo = header[1];
+
+                        byte[] rest1E = new byte[10];
+                        if (!ReadExact(client, rest1E, 0, 10)) break;
+
+                        ushort timer = BitConverter.ToUInt16(rest1E, 0);
+                        int startAddr = BitConverter.ToInt32(rest1E, 2);
+                        ushort devCode = BitConverter.ToUInt16(rest1E, 6);
+                        int points = BitConverter.ToUInt16(rest1E, 8);
+                        if (points == 0) points = 256;
+
+                        byte[]? writeData = null;
+                        if (subCommand == 0x02) // Write bits
+                        {
+                            int writeLen = (points + 1) / 2;
+                            writeData = new byte[writeLen];
+                            if (!ReadExact(client, writeData, 0, writeLen)) break;
+                        }
+                        else if (subCommand == 0x03) // Write words
+                        {
+                            int writeLen = points * 2;
+                            writeData = new byte[writeLen];
+                            if (!ReadExact(client, writeData, 0, writeLen)) break;
+                        }
+
+                        byte[] resp = HandleA1EBinary(subCommand, pcNo, timer, startAddr, devCode, points, writeData, "[TCP]");
+                        client.Send(resp);
                     }
-                    // 4. A-1E ASCII (Starts with "00", "01", "02", "03")
+                    // 4. A-1E ASCII
                     else if (header[0] == 0x30 && (header[1] >= 0x30 && header[1] <= 0x33))
                     {
-                        ProcessA1EAscii(client, header);
+                        byte[] restAscii = new byte[22];
+                        if (!ReadExact(client, restAscii, 0, 22)) break;
+
+                        string fullAscii = System.Text.Encoding.ASCII.GetString(header) +
+                                           System.Text.Encoding.ASCII.GetString(restAscii);
+
+                        byte[] resp = HandleA1EAsciiString(fullAscii, "[TCP]");
+                        client.Send(resp);
                     }
                     else
                     {
-                        // Unknown or stray byte - discard 1 byte and realign
                         byte[] discard = new byte[1];
                         if (client.Receive(discard, 0, 1, SocketFlags.None) <= 0) break;
                     }
@@ -206,7 +309,7 @@ namespace NetToGXSim2.Core
             }
             catch (Exception ex)
             {
-                LogMessage?.Invoke($"[{Name}] Connection closed / error: {ex.Message}");
+                LogMessage?.Invoke($"[{Name}] [TCP] Connection closed: {ex.Message}");
             }
             finally
             {
@@ -214,38 +317,124 @@ namespace NetToGXSim2.Core
                 try { client.Close(); } catch { }
             }
         }
+        #endregion
 
-        private void ProcessQna3EBinary(Socket client, byte[] header)
+        #region UDP Handling
+        private async Task UdpReceiveLoop(CancellationToken token)
         {
-            // Read remaining 7 bytes of 3E header: NetNo(1), PCNo(1), DestIO(2), DestStation(1), DataLength(2)
-            byte[] hdrRest = new byte[7];
-            if (!ReadExact(client, hdrRest, 0, 7)) return;
+            while (!token.IsCancellationRequested && IsRunning && _udpClient != null)
+            {
+                try
+                {
+                    var result = await _udpClient.ReceiveAsync().ConfigureAwait(false);
+                    byte[] b = result.Buffer;
+                    if (b == null || b.Length < 2) continue;
 
-            byte netNo = hdrRest[0];
-            byte pcNo = hdrRest[1];
-            ushort destIo = BitConverter.ToUInt16(hdrRest, 2);
-            byte destStation = hdrRest[4];
-            ushort dataLen = BitConverter.ToUInt16(hdrRest, 5);
+                    byte[]? resp = null;
 
-            byte[] payload = new byte[dataLen];
-            if (!ReadExact(client, payload, 0, dataLen)) return;
+                    // 1. QnA 3E Binary (0x50 0x00)
+                    if (b[0] == 0x50 && b[1] == 0x00 && b.Length >= 9)
+                    {
+                        byte netNo = b[2];
+                        byte pcNo = b[3];
+                        ushort destIo = BitConverter.ToUInt16(b, 4);
+                        byte destStation = b[6];
+                        ushort dataLen = BitConverter.ToUInt16(b, 7);
 
-            if (payload.Length < 4) return;
+                        if (b.Length >= 9 + dataLen)
+                        {
+                            byte[] payload = new byte[dataLen];
+                            Buffer.BlockCopy(b, 9, payload, 0, dataLen);
+                            resp = HandleQna3EBinary(netNo, pcNo, destIo, destStation, payload, "[UDP]");
+                        }
+                    }
+                    // 2. QnA 3E ASCII ("5000")
+                    else if (b.Length >= 18 && b[0] == 0x35 && b[1] == 0x30 && b[2] == 0x30 && b[3] == 0x30)
+                    {
+                        string fullAscii = System.Text.Encoding.ASCII.GetString(b);
+                        resp = HandleQna3EAsciiString(fullAscii, "[UDP]");
+                    }
+                    // 3. A-1E Binary (Subcommand 0x00 to 0x03)
+                    else if (b[0] <= 0x03 && b.Length >= 12)
+                    {
+                        byte subCommand = b[0];
+                        byte pcNo = b[1];
+                        ushort timer = BitConverter.ToUInt16(b, 2);
+                        int startAddr = BitConverter.ToInt32(b, 4);
+                        ushort devCode = BitConverter.ToUInt16(b, 8);
+                        int points = BitConverter.ToUInt16(b, 10);
+                        if (points == 0) points = 256;
+
+                        byte[]? writeData = null;
+                        if (subCommand == 0x02) // Write bits
+                        {
+                            int writeLen = (points + 1) / 2;
+                            if (b.Length >= 12 + writeLen)
+                            {
+                                writeData = new byte[writeLen];
+                                Buffer.BlockCopy(b, 12, writeData, 0, writeLen);
+                            }
+                        }
+                        else if (subCommand == 0x03) // Write words
+                        {
+                            int writeLen = points * 2;
+                            if (b.Length >= 12 + writeLen)
+                            {
+                                writeData = new byte[writeLen];
+                                Buffer.BlockCopy(b, 12, writeData, 0, writeLen);
+                            }
+                        }
+
+                        resp = HandleA1EBinary(subCommand, pcNo, timer, startAddr, devCode, points, writeData, "[UDP]");
+                    }
+                    // 4. A-1E ASCII
+                    else if (b.Length >= 24 && b[0] == 0x30 && (b[1] >= 0x30 && b[1] <= 0x33))
+                    {
+                        string fullAscii = System.Text.Encoding.ASCII.GetString(b);
+                        resp = HandleA1EAsciiString(fullAscii, "[UDP]");
+                    }
+
+                    if (resp != null && _udpClient != null)
+                    {
+                        await _udpClient.SendAsync(resp, resp.Length, result.RemoteEndPoint).ConfigureAwait(false);
+                    }
+                }
+                catch (ObjectDisposedException)
+                {
+                    break;
+                }
+                catch (SocketException)
+                {
+                    if (!IsRunning) break;
+                }
+                catch (Exception ex)
+                {
+                    if (!IsRunning) break;
+                    LogMessage?.Invoke($"[{Name}] [UDP Error] {ex.Message}");
+                }
+            }
+        }
+        #endregion
+
+        #region Protocol Frame Handlers
+        private byte[] HandleQna3EBinary(byte netNo, byte pcNo, ushort destIo, byte destStation, byte[] payload, string protoPrefix = "")
+        {
+            if (payload.Length < 4) return Create3EErrorResponse(netNo, pcNo, destIo, destStation, 0xC059);
+
             ushort timer = BitConverter.ToUInt16(payload, 0);
             ushort command = BitConverter.ToUInt16(payload, 2);
             ushort subCommand = payload.Length >= 6 ? BitConverter.ToUInt16(payload, 4) : (ushort)0;
 
             RequestsProcessed++;
-            byte[] response;
 
-            // Command 0x0101: Read CPU Type / Model (Sent by HMIs on initial connection)
+            // Command 0x0101: Read CPU Type / Model (Sent by HMIs like Weintek on initial connection)
             if (command == 0x0101)
             {
                 byte[] modelBytes = System.Text.Encoding.ASCII.GetBytes("Q02UCPU         "); // 16 bytes
                 ushort cpuCode = 0x0022;
 
                 ushort respDataLen = 20; // 2 (end code) + 16 (name) + 2 (code)
-                response = new byte[11 + 18];
+                byte[] response = new byte[11 + 18];
                 response[0] = 0xD0; response[1] = 0x00;
                 response[2] = netNo; response[3] = pcNo;
                 response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
@@ -255,9 +444,8 @@ namespace NetToGXSim2.Core
                 Buffer.BlockCopy(modelBytes, 0, response, 11, 16);
                 response[27] = (byte)(cpuCode & 0xFF); response[28] = (byte)((cpuCode >> 8) & 0xFF);
 
-                client.Send(response);
-                LogMessage?.Invoke($"[{Name}] [3E] Read CPU Type -> OK (Q02UCPU)");
-                return;
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Read CPU Type -> OK (Q02UCPU)");
+                return response;
             }
 
             // Command 0x0401: Batch Read
@@ -282,7 +470,7 @@ namespace NetToGXSim2.Core
                     }
 
                     ushort respDataLen = (ushort)(2 + bitPayload.Length);
-                    response = new byte[11 + bitPayload.Length];
+                    byte[] response = new byte[11 + bitPayload.Length];
                     response[0] = 0xD0; response[1] = 0x00;
                     response[2] = netNo; response[3] = pcNo;
                     response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
@@ -291,7 +479,8 @@ namespace NetToGXSim2.Core
                     response[9] = 0x00; response[10] = 0x00;
                     Buffer.BlockCopy(bitPayload, 0, response, 11, bitPayload.Length);
 
-                    LogMessage?.Invoke($"[{Name}] [3E] Read Bit {startDevName} x{points} -> OK");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Read Bit {startDevName} x{points} -> OK");
+                    return response;
                 }
                 else // Word Read (subCommand == 0x0000)
                 {
@@ -302,7 +491,7 @@ namespace NetToGXSim2.Core
                     Buffer.BlockCopy(wordVals, 0, wordPayload, 0, wordPayload.Length);
 
                     ushort respDataLen = (ushort)(2 + wordPayload.Length);
-                    response = new byte[11 + wordPayload.Length];
+                    byte[] response = new byte[11 + wordPayload.Length];
                     response[0] = 0xD0; response[1] = 0x00;
                     response[2] = netNo; response[3] = pcNo;
                     response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
@@ -311,10 +500,9 @@ namespace NetToGXSim2.Core
                     response[9] = 0x00; response[10] = 0x00;
                     Buffer.BlockCopy(wordPayload, 0, response, 11, wordPayload.Length);
 
-                    LogMessage?.Invoke($"[{Name}] [3E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    return response;
                 }
-                client.Send(response);
-                return;
             }
 
             // Command 0x0403: Random Read (Word & DWord)
@@ -351,7 +539,7 @@ namespace NetToGXSim2.Core
 
                 int totalBytes = wordPoints * 2 + dwordPoints * 4;
                 ushort respDataLen = (ushort)(2 + totalBytes);
-                response = new byte[11 + totalBytes];
+                byte[] response = new byte[11 + totalBytes];
                 response[0] = 0xD0; response[1] = 0x00;
                 response[2] = netNo; response[3] = pcNo;
                 response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
@@ -373,9 +561,8 @@ namespace NetToGXSim2.Core
                     response[outIdx++] = (byte)((dwordVals[i] >> 24) & 0xFF);
                 }
 
-                client.Send(response);
-                LogMessage?.Invoke($"[{Name}] [3E] Random Read {wordPoints} words, {dwordPoints} dwords -> OK");
-                return;
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Random Read {wordPoints} words, {dwordPoints} dwords -> OK");
+                return response;
             }
 
             // Command 0x1401: Batch Write
@@ -395,55 +582,111 @@ namespace NetToGXSim2.Core
                         bitVals[i] = (byte)((i % 2 == 0) ? ((b >> 4) & 0x01) : (b & 0x01));
                     }
                     _engine.WriteDeviceBlockBits(startDevName, points, bitVals);
-                    LogMessage?.Invoke($"[{Name}] [3E] Write Bit {startDevName} x{points} -> OK");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Write Bit {startDevName} x{points} -> OK");
                 }
                 else // Word Write
                 {
                     short[] wordVals = new short[points];
                     Buffer.BlockCopy(payload, 12, wordVals, 0, points * 2);
                     _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
-                    LogMessage?.Invoke($"[{Name}] [3E] Write Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Write Word {startDevName} x{points} -> OK ({wordVals[0]})");
                 }
 
                 ushort respDataLen = 2;
-                response = new byte[11];
+                byte[] response = new byte[11];
                 response[0] = 0xD0; response[1] = 0x00;
                 response[2] = netNo; response[3] = pcNo;
                 response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
                 response[6] = destStation;
                 response[7] = (byte)(respDataLen & 0xFF); response[8] = (byte)((respDataLen >> 8) & 0xFF);
                 response[9] = 0x00; response[10] = 0x00;
-                client.Send(response);
-                return;
+                return response;
+            }
+
+            // Command 0x1402: Random Write
+            if (command == 0x1402)
+            {
+                if (subCommand == 0x0001) // Bit units
+                {
+                    if (payload.Length >= 7)
+                    {
+                        byte bitPoints = payload[6];
+                        int offset = 7;
+                        for (int i = 0; i < bitPoints && offset + 5 <= payload.Length; i++)
+                        {
+                            int addr = payload[offset] | (payload[offset + 1] << 8) | (payload[offset + 2] << 16);
+                            byte devCode = payload[offset + 3];
+                            byte val = payload[offset + 4];
+                            offset += 5;
+                            string devName = GxSimulatorEngine.StepDeviceName(GetQnaDevicePrefix(devCode) + "0", addr);
+                            _engine.WriteDevice(devName, val != 0 ? 1 : 0);
+                        }
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Random Write {bitPoints} bits -> OK");
+                    }
+                }
+                else // Word & DWord units (subCommand == 0x0000)
+                {
+                    if (payload.Length >= 8)
+                    {
+                        byte wordPoints = payload[6];
+                        byte dwordPoints = payload[7];
+                        int offset = 8;
+
+                        for (int i = 0; i < wordPoints && offset + 6 <= payload.Length; i++)
+                        {
+                            int addr = payload[offset] | (payload[offset + 1] << 8) | (payload[offset + 2] << 16);
+                            byte devCode = payload[offset + 3];
+                            short val = BitConverter.ToInt16(payload, offset + 4);
+                            offset += 6;
+                            string devName = GxSimulatorEngine.StepDeviceName(GetQnaDevicePrefix(devCode) + "0", addr);
+                            _engine.WriteDevice(devName, (int)(ushort)val);
+                        }
+
+                        for (int i = 0; i < dwordPoints && offset + 8 <= payload.Length; i++)
+                        {
+                            int addr = payload[offset] | (payload[offset + 1] << 8) | (payload[offset + 2] << 16);
+                            byte devCode = payload[offset + 3];
+                            int val = BitConverter.ToInt32(payload, offset + 4);
+                            offset += 8;
+                            string devLow = GxSimulatorEngine.StepDeviceName(GetQnaDevicePrefix(devCode) + "0", addr);
+                            string devHigh = GxSimulatorEngine.StepDeviceName(GetQnaDevicePrefix(devCode) + "0", addr + 1);
+                            _engine.WriteDevice(devLow, val & 0xFFFF);
+                            _engine.WriteDevice(devHigh, (val >> 16) & 0xFFFF);
+                        }
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Random Write {wordPoints} words, {dwordPoints} dwords -> OK");
+                    }
+                }
+
+                ushort respDataLen = 2;
+                byte[] response = new byte[11];
+                response[0] = 0xD0; response[1] = 0x00;
+                response[2] = netNo; response[3] = pcNo;
+                response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
+                response[6] = destStation;
+                response[7] = (byte)(respDataLen & 0xFF); response[8] = (byte)((respDataLen >> 8) & 0xFF);
+                response[9] = 0x00; response[10] = 0x00;
+                return response;
             }
 
             // Default / Other command: Return clean error code so client does not hang
-            response = new byte[11];
+            LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Command 0x{command:X4} returned response code 0xC059");
+            return Create3EErrorResponse(netNo, pcNo, destIo, destStation, 0xC059);
+        }
+
+        private byte[] Create3EErrorResponse(byte netNo, byte pcNo, ushort destIo, byte destStation, ushort errorCode)
+        {
+            byte[] response = new byte[11];
             response[0] = 0xD0; response[1] = 0x00;
             response[2] = netNo; response[3] = pcNo;
             response[4] = (byte)(destIo & 0xFF); response[5] = (byte)((destIo >> 8) & 0xFF);
             response[6] = destStation;
             response[7] = 0x02; response[8] = 0x00;
-            response[9] = 0x59; response[10] = 0xC0; // Error code
-            client.Send(response);
-            LogMessage?.Invoke($"[{Name}] [3E] Command 0x{command:X4} returned response code 0xC059");
+            response[9] = (byte)(errorCode & 0xFF); response[10] = (byte)((errorCode >> 8) & 0xFF);
+            return response;
         }
 
-        private void ProcessA1EBinary(Socket client, byte[] header)
+        private byte[] HandleA1EBinary(byte subCommand, byte pcNo, ushort timer, int startAddr, ushort devCode, int points, byte[]? writeData, string protoPrefix = "")
         {
-            // A-1E Binary Frame: Subcommand(1), PC(1), Timer(2), Address(4), DevCode(2), Points(2) = 12 bytes
-            byte subCommand = header[0];
-            byte pcNo = header[1];
-
-            byte[] rest1E = new byte[10];
-            if (!ReadExact(client, rest1E, 0, 10)) return;
-
-            ushort timer = BitConverter.ToUInt16(rest1E, 0);
-            int startAddr = BitConverter.ToInt32(rest1E, 2);
-            ushort devCode = BitConverter.ToUInt16(rest1E, 6);
-            int points = BitConverter.ToUInt16(rest1E, 8);
-            if (points == 0) points = 256;
-
             string devPrefix = GetA1EDevicePrefix(devCode);
             string startDevName = GxSimulatorEngine.StepDeviceName(devPrefix + "0", startAddr);
 
@@ -468,7 +711,7 @@ namespace NetToGXSim2.Core
                         response = new byte[2 + payload.Length];
                         response[0] = 0x80; response[1] = 0x00;
                         Buffer.BlockCopy(payload, 0, response, 2, payload.Length);
-                        LogMessage?.Invoke($"[{Name}] [1E] Read Bit {startDevName} x{points} -> OK");
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Read Bit {startDevName} x{points} -> OK");
                     }
                     break;
 
@@ -483,41 +726,38 @@ namespace NetToGXSim2.Core
                         response = new byte[2 + payload.Length];
                         response[0] = 0x81; response[1] = 0x00;
                         Buffer.BlockCopy(payload, 0, response, 2, payload.Length);
-                        LogMessage?.Invoke($"[{Name}] [1E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
                     }
                     break;
 
                 case 0x02: // Write Bits
                     {
-                        int writeLen = (points + 1) / 2;
-                        byte[] writeBuf = new byte[writeLen];
-                        if (!ReadExact(client, writeBuf, 0, writeLen)) return;
-
-                        byte[] bitVals = new byte[points];
-                        for (int i = 0; i < points; i++)
+                        if (writeData != null)
                         {
-                            byte b = writeBuf[i / 2];
-                            bitVals[i] = (byte)((i % 2 == 0) ? ((b >> 4) & 0x01) : (b & 0x01));
+                            byte[] bitVals = new byte[points];
+                            for (int i = 0; i < points && (i / 2) < writeData.Length; i++)
+                            {
+                                byte b = writeData[i / 2];
+                                bitVals[i] = (byte)((i % 2 == 0) ? ((b >> 4) & 0x01) : (b & 0x01));
+                            }
+                            _engine.WriteDeviceBlockBits(startDevName, points, bitVals);
                         }
-
-                        _engine.WriteDeviceBlockBits(startDevName, points, bitVals);
                         response = new byte[] { 0x82, 0x00 };
-                        LogMessage?.Invoke($"[{Name}] [1E] Write Bit {startDevName} x{points} -> OK");
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Write Bit {startDevName} x{points} -> OK");
                     }
                     break;
 
                 case 0x03: // Write Words
                     {
-                        int writeLen = points * 2;
-                        byte[] writeBuf = new byte[writeLen];
-                        if (!ReadExact(client, writeBuf, 0, writeLen)) return;
-
-                        short[] wordVals = new short[points];
-                        Buffer.BlockCopy(writeBuf, 0, wordVals, 0, writeLen);
-
-                        _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
+                        if (writeData != null)
+                        {
+                            short[] wordVals = new short[points];
+                            int copyLen = Math.Min(writeData.Length, points * 2);
+                            Buffer.BlockCopy(writeData, 0, wordVals, 0, copyLen);
+                            _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
+                        }
                         response = new byte[] { 0x83, 0x00 };
-                        LogMessage?.Invoke($"[{Name}] [1E] Write Word {startDevName} x{points} -> OK");
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Write Word {startDevName} x{points} -> OK");
                     }
                     break;
 
@@ -526,32 +766,27 @@ namespace NetToGXSim2.Core
                     break;
             }
 
-            if (response != null) client.Send(response);
+            return response;
         }
 
-        private void ProcessQna3EAscii(Socket client, byte[] header)
+        private byte[] HandleQna3EAsciiString(string s, string protoPrefix = "")
         {
-            // First 2 chars were '5', '0'. Read next 2 chars to finish "5000"
-            byte[] subHdrRest = new byte[2];
-            if (!ReadExact(client, subHdrRest, 0, 2)) return;
+            if (s.Length < 18) return System.Text.Encoding.ASCII.GetBytes("D00000FF03FF000004C059");
 
-            // Header rest in ASCII: NetNo(2), PCNo(2), DestIO(4), DestStation(2), DataLen(4) = 14 chars
-            byte[] hdrAscii = new byte[14];
-            if (!ReadExact(client, hdrAscii, 0, 14)) return;
+            string sNetNo = s.Substring(4, 2);
+            string sPcNo = s.Substring(6, 2);
+            string sDestIo = s.Substring(8, 4);
+            string sDestStation = s.Substring(12, 2);
+            string sDataLen = s.Substring(14, 4);
 
-            string sNetNo = System.Text.Encoding.ASCII.GetString(hdrAscii, 0, 2);
-            string sPcNo = System.Text.Encoding.ASCII.GetString(hdrAscii, 2, 2);
-            string sDestIo = System.Text.Encoding.ASCII.GetString(hdrAscii, 4, 4);
-            string sDestStation = System.Text.Encoding.ASCII.GetString(hdrAscii, 8, 2);
-            string sDataLen = System.Text.Encoding.ASCII.GetString(hdrAscii, 10, 4);
+            int dataLen = 0;
+            try { dataLen = Convert.ToInt32(sDataLen, 16); } catch { }
+            if (s.Length < 18 + dataLen || dataLen < 8)
+            {
+                return System.Text.Encoding.ASCII.GetBytes("D000" + sNetNo + sPcNo + sDestIo + sDestStation + "0004C059");
+            }
 
-            int dataLen = Convert.ToInt32(sDataLen, 16);
-            byte[] payloadAscii = new byte[dataLen];
-            if (!ReadExact(client, payloadAscii, 0, dataLen)) return;
-
-            string sPayload = System.Text.Encoding.ASCII.GetString(payloadAscii);
-            if (sPayload.Length < 8) return;
-
+            string sPayload = s.Substring(18, dataLen);
             string sTimer = sPayload.Substring(0, 4);
             string sCommand = sPayload.Substring(4, 4);
             string sSubCommand = sPayload.Length >= 12 ? sPayload.Substring(8, 4) : "0000";
@@ -563,19 +798,18 @@ namespace NetToGXSim2.Core
             {
                 string cpuModelAscii = "51303255435055202020202020202020"; // "Q02UCPU         " in hex ASCII
                 string cpuCodeAscii = "0022";
-                string respData = "0000" + cpuModelAscii + cpuCodeAscii; // End code + model + code
+                string respData = "0000" + cpuModelAscii + cpuCodeAscii;
                 string sRespLen = (respData.Length).ToString("X4");
 
                 string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + sRespLen + respData;
-                client.Send(System.Text.Encoding.ASCII.GetBytes(respStr));
-                LogMessage?.Invoke($"[{Name}] [3E ASCII] Read CPU Type -> OK (Q02UCPU)");
-                return;
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Read CPU Type -> OK (Q02UCPU)");
+                return System.Text.Encoding.ASCII.GetBytes(respStr);
             }
 
             // Batch Read in ASCII: "0401"
             if (sCommand == "0401" && sPayload.Length >= 22)
             {
-                string sDevCode = sPayload.Substring(12, 2); // or 4
+                string sDevCode = sPayload.Substring(12, 2);
                 string sAddr = sPayload.Substring(14, 6);
                 string sPoints = sPayload.Substring(20, 4);
 
@@ -598,8 +832,8 @@ namespace NetToGXSim2.Core
                     for (int i = 0; i < points; i++) sb.Append(bitVals[i] != 0 ? "1" : "0");
                     string dataStr = sb.ToString();
                     string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + (dataStr.Length + 4).ToString("X4") + "0000" + dataStr;
-                    client.Send(System.Text.Encoding.ASCII.GetBytes(respStr));
-                    LogMessage?.Invoke($"[{Name}] [3E ASCII] Read Bit {startDevName} x{points} -> OK");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Read Bit {startDevName} x{points} -> OK");
+                    return System.Text.Encoding.ASCII.GetBytes(respStr);
                 }
                 else // Word Read
                 {
@@ -609,32 +843,28 @@ namespace NetToGXSim2.Core
                     for (int i = 0; i < points; i++) sb.Append(((ushort)wordVals[i]).ToString("X4"));
                     string dataStr = sb.ToString();
                     string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + (dataStr.Length + 4).ToString("X4") + "0000" + dataStr;
-                    client.Send(System.Text.Encoding.ASCII.GetBytes(respStr));
-                    LogMessage?.Invoke($"[{Name}] [3E ASCII] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    return System.Text.Encoding.ASCII.GetBytes(respStr);
                 }
-                return;
             }
 
             // Default ASCII error response
             string defaultResp = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + "0004C059";
-            client.Send(System.Text.Encoding.ASCII.GetBytes(defaultResp));
+            return System.Text.Encoding.ASCII.GetBytes(defaultResp);
         }
 
-        private void ProcessA1EAscii(Socket client, byte[] header)
+        private byte[] HandleA1EAsciiString(string s, string protoPrefix = "")
         {
-            // A-1E ASCII Frame (e.g. "00FF", "01FF" ...)
-            byte[] restAscii = new byte[22]; // Timer(4), DevCode(4), Address(8), Points(4), Dummy(2)
-            if (!ReadExact(client, restAscii, 0, restAscii.Length)) return;
+            if (s.Length < 24) return System.Text.Encoding.ASCII.GetBytes("805B");
 
-            string subCmd = System.Text.Encoding.ASCII.GetString(header);
-            string restStr = System.Text.Encoding.ASCII.GetString(restAscii);
+            string subCmd = s.Substring(0, 2);
+            RequestsProcessed++;
 
             // Read Words "01"
             if (subCmd == "01")
             {
-                string sDevCode = restStr.Substring(4, 2);
-                string sAddr = restStr.Substring(8, 6);
-                string sPoints = restStr.Substring(16, 2);
+                string sAddr = s.Substring(10, 6);
+                string sPoints = s.Substring(18, 2);
 
                 int startAddr = Convert.ToInt32(sAddr, 10);
                 int points = Convert.ToInt32(sPoints, 16);
@@ -645,16 +875,15 @@ namespace NetToGXSim2.Core
                 _engine.ReadDeviceBlockWords(startDevName, points, out wordVals);
 
                 var sb = new System.Text.StringBuilder();
-                sb.Append("8100"); // Normal completion
+                sb.Append("8100");
                 for (int i = 0; i < points; i++) sb.Append(((ushort)wordVals[i]).ToString("X4"));
-                client.Send(System.Text.Encoding.ASCII.GetBytes(sb.ToString()));
-                LogMessage?.Invoke($"[{Name}] [1E ASCII] Read Word {startDevName} x{points} -> OK");
-                return;
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E ASCII] Read Word {startDevName} x{points} -> OK");
+                return System.Text.Encoding.ASCII.GetBytes(sb.ToString());
             }
 
-            // Default 1E ASCII Response
-            client.Send(System.Text.Encoding.ASCII.GetBytes("805B"));
+            return System.Text.Encoding.ASCII.GetBytes("805B");
         }
+        #endregion
 
         private static bool ReadExact(Socket socket, byte[] buffer, int offset, int count)
         {

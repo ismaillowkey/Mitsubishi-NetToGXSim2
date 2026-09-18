@@ -1,6 +1,6 @@
 ; ==============================================================================
 ; NSIS Script: GX2 Bridge Installer
-; Version: 0.3.0
+; Version: 0.3.2
 ; Developed by: Ismail Lowkey
 ; ==============================================================================
 
@@ -12,7 +12,7 @@
 ; --------------------------------------------------
 !define PRODUCT_NAME "GX2 Bridge by Ismail Lowkey"
 !define PRODUCT_SHORT_NAME "GX2 Bridge"
-!define PRODUCT_VERSION "0.3.0"
+!define PRODUCT_VERSION "0.3.2"
 !define PRODUCT_PUBLISHER "Ismail Lowkey"
 !define MAIN_EXE "NetToGXSim2.Wpf.exe"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\GX2Bridge"

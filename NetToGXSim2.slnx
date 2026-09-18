@@ -1,6 +1,0 @@
-<Solution>
-  <Folder Name="/src/">
-    <Project Path="src/NetToGXSim2.Core/NetToGXSim2.Core.csproj" />
-    <Project Path="src/NetToGXSim2.Wpf/NetToGXSim2.Wpf.csproj" />
-  </Folder>
-</Solution>
