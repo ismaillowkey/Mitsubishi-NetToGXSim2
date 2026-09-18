@@ -1,0 +1,31 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net472</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <PlatformTarget>x86</PlatformTarget>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <UseWPF>true</UseWPF>
+    <RootNamespace>NetToGXSim2.Wpf</RootNamespace>
+    <ApplicationIcon>Resources\app_icon.ico</ApplicationIcon>
+    <Version>0.3.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
+    <Product>GX2 Bridge by Ismail Lowkey</Product>
+    <Company>Ismail Lowkey</Company>
+    <Authors>Ismail Lowkey</Authors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Resource Include="Resources\app_icon.ico" />
+    <Resource Include="Resources\app_icon.png" />
+    <Resource Include="Resources\architecture_diagram.png" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\NetToGXSim2.Core\NetToGXSim2.Core.csproj" />
+  </ItemGroup>
+
+</Project>

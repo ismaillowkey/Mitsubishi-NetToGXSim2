@@ -1,0 +1,68 @@
+## Build Results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+[Aa][Rr][Mm]/
+[Aa][Rr][Mm]64/
+bld/
+[Bb]in/
+[Oo]bj/
+[Ll]og/
+[Ll]ogs/
+
+## Publish and Setup Outputs
+publish/
+*.exe
+!src/**/*.exe
+GX2Bridge_Setup*.exe
+Setup_NetToGXSim2*.exe
+
+## Visual Studio
+.vs/
+*.user
+*.userosscache
+*.sln.docstates
+*.suo
+*.userprefs
+*.dbmdl
+*.opendb
+
+## Visual Studio Code
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+## ReSharper and Rider
+_ReSharper*/
+*.[Rr]e[Ss]harper
+*.DotSettings.user
+
+## OS Files
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+*.cab
+*.msi
+*.msix
+*.msm
+*.msp
+
+## Scratch / Temporary test logs
+scratch/bin/
+scratch/obj/
+*.log
+
+## Weintek EasyBuilder Pro Backup & Compiled Files
+*.emtp.bak*
+*.exob
+Example Program HMI/Weintek/MCBinaryTCP.emtp.bak1
+Example Program HMI/Weintek/MCBinaryTCP.emtp.bak2
+Example Program HMI/Weintek/MCBinaryTCP.emtp.bak3
+Example Program HMI/Weintek/MCBinaryTCP.exob
