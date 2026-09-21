@@ -726,6 +726,25 @@ namespace NetToGXSim2.Wpf.Views
             MessageBox.Show($"NetToGXSim2 v{UpdateCheckerService.CurrentVersion}\nMitsubishi GX Works 2 Simulator Network Bridge\n\nDeveloped by Ismail Lowkey", "About NetToGXSim2", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
+        private void MenuOpenUrl_Click(object sender, RoutedEventArgs e)
+        {
+            if (sender is FrameworkElement elem && elem.Tag is string url && !string.IsNullOrWhiteSpace(url))
+            {
+                try
+                {
+                    System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+                    {
+                        FileName = url,
+                        UseShellExecute = true
+                    });
+                }
+                catch (Exception ex)
+                {
+                    MessageBox.Show($"Failed to open link:\n{ex.Message}", "Error Opening Link", MessageBoxButton.OK, MessageBoxImage.Error);
+                }
+            }
+        }
+
         protected override void OnClosed(EventArgs e)
         {
             _pollTimer.Stop();

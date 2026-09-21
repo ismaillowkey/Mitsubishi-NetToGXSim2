@@ -4,7 +4,7 @@
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="NetToGXSim2 v0.5.2 - Mitsubishi GX Works 2 Simulator Network Bridge by Ismail Lowkey" 
+        Title="NetToGXSim2 v0.5.4 - Mitsubishi GX Works 2 Simulator Network Bridge by Ismail Lowkey" 
         Icon="pack://application:,,,/Resources/app_icon.ico"
         Height="700" Width="1100"
         WindowStartupLocation="CenterScreen"
@@ -98,6 +98,12 @@
                 <MenuItem Header="Toggle Inspector &amp; Log Tab" Click="MenuToggleLog_Click" />
                 <MenuItem Header="What's New" Click="MenuWhatsNew_Click" />
             </MenuItem>
+            <MenuItem Header="🚀 _My Apps">
+                <MenuItem Header="Mitsubishi Net To GXsim2" Tag="https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2" Click="MenuOpenUrl_Click" />
+                <MenuItem Header="Mitsubishi Net To GXsim3" Tag="https://github.com/ismaillowkey/Mitsubishi-NetToGXSim3" Click="MenuOpenUrl_Click" />
+                <MenuItem Header="Omron Net To Cx Sim" Tag="https://github.com/ismaillowkey/OmronNetToCXSim" Click="MenuOpenUrl_Click" />
+                <MenuItem Header="MPS Pneumatic Simulator" Tag="https://github.com/ismaillowkey/MPSPneumaticSimulator" Click="MenuOpenUrl_Click" />
+            </MenuItem>
             <MenuItem Header="🔄 Check for Updates" Click="MenuCheckUpdate_Click" FontWeight="SemiBold" Foreground="#0284C7"/>
             <MenuItem Header="✨ What's New" Click="MenuWhatsNew_Click" FontWeight="SemiBold" Foreground="#2563EB"/>
             <MenuItem Header="_Help">
@@ -119,7 +125,7 @@
 
                 <!-- Left: Application Info -->
                 <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                    <TextBlock Text="NetToGXSim2 v0.5.2" FontSize="11" FontWeight="SemiBold" Foreground="#64748B"/>
+                    <TextBlock Text="NetToGXSim2 v0.5.4" FontSize="11" FontWeight="SemiBold" Foreground="#64748B"/>
                     <TextBlock Text=" • Mitsubishi GX Works 2 Network Bridge" FontSize="11" Foreground="#94A3B8" Margin="4,0,0,0"/>
                 </StackPanel>
 
@@ -151,7 +157,7 @@
                                     <StackPanel Orientation="Horizontal">
                                         <TextBlock Text="NetToGXSim2" FontSize="22" FontWeight="Bold" Foreground="#0F172A" Margin="0,0,10,0"/>
                                         <Border Background="#E0F2FE" CornerRadius="6" Padding="8,2" VerticalAlignment="Center" Margin="0,0,6,0">
-                                            <TextBlock Text="v0.5.2" FontSize="11" FontWeight="Bold" Foreground="#0369A1" />
+                                            <TextBlock Text="v0.5.4" FontSize="11" FontWeight="Bold" Foreground="#0369A1" />
                                         </Border>
                                         <Border Background="#F1F5F9" CornerRadius="6" Padding="8,2" VerticalAlignment="Center" Margin="0,0,6,0">
                                             <TextBlock Text="by Ismail Lowkey" FontSize="11" FontWeight="SemiBold" Foreground="#475569" />
@@ -428,7 +434,7 @@
                                             <StackPanel Orientation="Horizontal">
                                                 <TextBlock Text="Release Notes &amp; Changelog" FontSize="16" FontWeight="Bold" Foreground="#0F172A"/>
                                                 <Border Background="#E0F2FE" CornerRadius="6" Padding="8,2" Margin="10,0,0,0" VerticalAlignment="Center">
-                                                    <TextBlock Text="Latest: v0.5.2" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
+                                                    <TextBlock Text="Latest: v0.5.4" FontSize="11" FontWeight="Bold" Foreground="#0284C7"/>
                                                 </Border>
                                             </StackPanel>
                                             <TextBlock Text="Discover new features, protocol enhancements, and performance optimizations in NetToGXSim2." FontSize="12" Foreground="#64748B" Margin="0,3,0,0"/>
@@ -437,18 +443,76 @@
                                     </Grid>
                                 </Border>
 
-                                <!-- Version 0.5.2 Card -->
+                                <!-- Version 0.5.4 Card -->
                                 <Border Background="#FFFFFF" CornerRadius="12" Padding="20" Margin="0,0,0,12" BorderBrush="#BAE6FD" BorderThickness="1.5">
                                     <StackPanel>
                                         <Grid Margin="0,0,0,12">
                                             <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
                                                 <Border Background="#0284C7" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
-                                                    <TextBlock Text="v0.5.2" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                                    <TextBlock Text="v0.5.4" FontWeight="Bold" FontSize="12" Foreground="White"/>
                                                 </Border>
-                                                <TextBlock Text="Direct GX Simulator 2 Engine Connection (Zero-Config)" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                                <TextBlock Text="My Apps Ecosystem Menu &amp; Single-Instance Error Protection" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
                                                 <Border Background="#ECFDF5" CornerRadius="6" Padding="6,2" Margin="10,0,0,0" VerticalAlignment="Center">
                                                     <TextBlock Text="CURRENT" FontWeight="Bold" FontSize="10.5" Foreground="#059669"/>
                                                 </Border>
+                                            </StackPanel>
+                                            <TextBlock Text="September 2026" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🚀 Dedicated &quot;My Apps&quot; Ecosystem Navigation Menu" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Added a direct menu shortcut to Ismail Lowkey's suite of PLC simulators and bridges: Mitsubishi Net To GXsim2, Mitsubishi Net To GXsim3, Omron Net To Cx Sim, and MPS Pneumatic Simulator." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🛡️ Enhanced Single-Instance Error &amp; Focus Alert" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Strictly enforces single application instance execution. Running a duplicate instance automatically brings the existing application window to front and presents an error notification, eliminating COM port conflicts." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Version 0.5.3 Card -->
+                                <Border Background="#FFFFFF" CornerRadius="12" Padding="20" Margin="0,0,0,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,12">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="#64748B" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="v0.5.3" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                                </Border>
+                                                <TextBlock Text="Single-Instance Application Protection &amp; Auto-Update Polish" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
+                                            </StackPanel>
+                                            <TextBlock Text="September 2026" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
+                                        </Grid>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🛡️ Single-Instance Process Enforcement" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Prevents multiple application instances from opening simultaneously. Running a second instance now automatically restores and brings the existing window to the foreground and shows an alert, preventing port conflicts and COM simulator bus locking." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+
+                                        <Border Background="#F8FAFC" CornerRadius="8" Padding="14,12" Margin="0,0,0,8" BorderBrush="#E2E8F0" BorderThickness="1">
+                                            <StackPanel>
+                                                <TextBlock Text="🔄 Robust GitHub Auto-Updater &amp; Direct Release Links" FontWeight="Bold" FontSize="12.5" Foreground="#0284C7" Margin="0,0,0,4"/>
+                                                <TextBlock Text="Refined update checker with resilient 404 handling, verified release URLs, and modern TLS 1.2/1.3 security headers for smooth background updates." FontSize="11.5" Foreground="#334155" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Version 0.5.2 Card -->
+                                <Border Background="#FFFFFF" CornerRadius="12" Padding="20" Margin="0,0,0,12" BorderBrush="#E2E8F0" BorderThickness="1">
+                                    <StackPanel>
+                                        <Grid Margin="0,0,0,12">
+                                            <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                                                <Border Background="#64748B" CornerRadius="6" Padding="8,3" Margin="0,0,10,0">
+                                                    <TextBlock Text="v0.5.2" FontWeight="Bold" FontSize="12" Foreground="White"/>
+                                                </Border>
+                                                <TextBlock Text="Direct GX Simulator 2 Engine Connection (Zero-Config)" FontSize="14" FontWeight="Bold" Foreground="#0F172A" VerticalAlignment="Center"/>
                                             </StackPanel>
                                             <TextBlock Text="September 2026" FontSize="11" Foreground="#94A3B8" HorizontalAlignment="Right" VerticalAlignment="Center"/>
                                         </Grid>

@@ -1,7 +1,7 @@
 # NetToGXSim2
 
 **Mitsubishi GX Works 2 Simulator Network Protocol Bridge**  
-*Version 0.5.2 | Developed by Ismail Lowkey*
+*Version 0.5.4 | Developed by Ismail Lowkey*
 
 [![Download Installer](https://img.shields.io/badge/⬇️_Download-Windows_Installer-0284C7?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases/latest)
 [![GitHub Releases](https://img.shields.io/badge/📦_All-Releases-10B981?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases)
@@ -208,7 +208,7 @@ create_installer.bat
 
 - **Developer**: Ismail Lowkey
 - **Repository**: [ismaillowkey/Mitsubishi-NetToGXSim2](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2)
-- **Version**: 0.5.2
+- **Version**: 0.5.4
 
 ---
 

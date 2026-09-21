@@ -17,9 +17,10 @@ namespace NetToGXSim2.Wpf.Services
 
     public static class UpdateCheckerService
     {
-        public const string CurrentVersion = "0.5.2";
+        public const string CurrentVersion = "0.5.4";
         public const string ReleasesPageUrl = "https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases";
         public const string LatestReleaseApiUrl = "https://api.github.com/repos/ismaillowkey/Mitsubishi-NetToGXSim2/releases/latest";
+        public const string RepoUrl = "https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2";
 
         public static async Task<UpdateCheckResult> CheckForUpdatesAsync()
         {
@@ -35,12 +36,29 @@ namespace NetToGXSim2.Wpf.Services
 
                 using (var client = new WebClient())
                 {
-                    client.Headers.Add("User-Agent", "GX2Bridge-AutoUpdater");
+                    client.Headers.Add("User-Agent", "NetToGXSim2-AutoUpdater");
                     client.Headers.Add("Accept", "application/vnd.github.v3+json");
 
-                    string json = await client.DownloadStringTaskAsync(LatestReleaseApiUrl);
+                    string json;
+                    try
+                    {
+                        json = await client.DownloadStringTaskAsync(LatestReleaseApiUrl);
+                    }
+                    catch (WebException webEx)
+                    {
+                        if (webEx.Response is HttpWebResponse httpResp && httpResp.StatusCode == HttpStatusCode.NotFound)
+                        {
+                            // 404 means no release published yet or repository newly created
+                            result.Success = true;
+                            result.HasUpdate = false;
+                            result.LatestVersion = "v" + CurrentVersion;
+                            result.ReleaseUrl = ReleasesPageUrl;
+                            return result;
+                        }
+                        throw;
+                    }
 
-                    // Parse tag_name (e.g. "v0.3.2" or "0.3.2")
+                    // Parse tag_name (e.g. "v0.5.2" or "0.5.2")
                     var tagMatch = Regex.Match(json, "\"tag_name\"\\s*:\\s*\"([^\"]+)\"");
                     if (!tagMatch.Success)
                     {
