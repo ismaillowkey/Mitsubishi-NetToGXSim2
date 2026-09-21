@@ -1,21 +1,24 @@
-# GX2 Bridge (NetToGXSim2)
+# NetToGXSim2
 
 **Mitsubishi GX Works 2 Simulator Network Protocol Bridge**  
-*Version 0.3.2 | Developed by Ismail Lowkey*
+*Version 0.5.2 | Developed by Ismail Lowkey*
+
+[![Download Installer](https://img.shields.io/badge/⬇️_Download-Windows_Installer-0284C7?style=for-the-badge&logo=windows&logoColor=white)](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases/latest)
+[![GitHub Releases](https://img.shields.io/badge/📦_All-Releases-10B981?style=for-the-badge&logo=github&logoColor=white)](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases)
 
 [![Platform](https://img.shields.io/badge/Platform-Windows%20x86%20%7C%20x64-blue.svg)]()
 [![Framework](https://img.shields.io/badge/.NET%20Framework-4.7.2-purple.svg)]()
 [![Target](https://img.shields.io/badge/Target-MELSOFT%20GX%20Simulator%202-red.svg)]()
-[![Protocol](https://img.shields.io/badge/Protocol-MC%20Protocol%20(3E%20%26%201E)-green.svg)]()
+[![Protocol](https://img.shields.io/badge/Protocol-MC%20Protocol%20(3E%20%26%201E%20TCP%2FUDP)-green.svg)]()
 [![License](https://img.shields.io/badge/License-MIT-lightgrey.svg)]()
 
 ---
 
 ## 📖 Overview
 
-**GX2 Bridge** (NetToGXSim2) is a lightweight, high-performance bridge application that connects **Mitsubishi GX Simulator 2** (the simulation engine bundled with **GX Works 2**) to external Ethernet networks via the standard **MELSEC Communication (MC) Protocol**.
+**NetToGXSim2** is a lightweight, high-performance bridge application that connects **Mitsubishi GX Simulator 2** (the simulation engine bundled with **GX Works 2**) directly to external Ethernet networks via the standard **MELSEC Communication (MC) Protocol (TCP & UDP)**.
 
-Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM process (`SimManager.exe`), making it impossible for external HMIs, SCADA packages, or IoT gateways to communicate with the simulated PLC without physical hardware. **GX2 Bridge** removes this limitation by hosting dual Ethernet TCP servers that translate MC Protocol requests directly into internal GX Simulator 2 memory reads and writes with sub-millisecond response times.
+Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM process (`SimManager.exe`), making it impossible for external HMIs, SCADA packages, or IoT gateways to communicate with the simulated PLC without physical hardware. **NetToGXSim2** removes this limitation by communicating directly with the simulator engine (**Zero-Configuration**, no MX Component utility setup needed) and hosting dual Ethernet TCP/UDP servers that translate MC Protocol requests into simulator memory reads/writes with sub-millisecond response times.
 
 ---
 
@@ -31,15 +34,15 @@ Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM pr
 │                    GX Simulator 2 Engine                    │
 │             (SimManager.exe / Virtual FX CPU)               │
 └──────────────────────────────┬──────────────────────────────┘
-                               │ ActUtlType COM Interface
+                               │ Direct COM Engine Interface (ActProgType / ActUtlType)
 ┌──────────────────────────────▼──────────────────────────────┐
-│                  GX2 Bridge (NetToGXSim2)                   │
+│                  NetToGXSim2                                │
 │  ┌─────────────────────────┐     ┌────────────────────────┐ │
-│  │   MC TCP Server 1       │     │   MC TCP Server 2      │ │
+│  │   MC TCP/UDP Server 1   │     │   MC TCP/UDP Server 2  │ │
 │  │   (Default: Port 5001)  │     │   (Default: Port 6000) │ │
 │  └────────────┬────────────┘     └───────────┬────────────┘ │
 └───────────────┼──────────────────────────────┼──────────────┘
-                │ Ethernet TCP (MC Protocol)   │
+                │ Ethernet TCP / UDP (MC Protocol)
     ┌───────────┴──────────┬───────────────────┴───────────┐
     │                      │                               │
 ┌───▼─────────────┐ ┌──────▼───────────────┐ ┌─────────────▼───┐
@@ -52,38 +55,45 @@ Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM pr
 
 ## ✨ Features
 
-- **Dual MC Protocol Servers**:
+- **Direct Simulator Connection (Zero-Configuration)**:
+  - Connects directly to the GX Simulator 2 engine via `ActProgType` without requiring manual Logical Station configuration in MX Component Utility.
+  - Automatic probing and detection for FX Series (`FX3U`, `FX3G`, `FX3S`, `FX2N`, `FX1N`, `FX0N`) and Q Series (`Q00J`, `Q00`, `Q01`, `Q02`).
+  - Automatic fallback to `ActUtlType` station scanning if needed.
+
+- **Dual Simultaneous TCP & UDP MC Servers**:
   - **Server 1**: Default port 5000 (auto-increments to 5001 if port 5000 is occupied). Started automatically at launch.
   - **Server 2**: Default port 6000. Stopped by default for secondary clients or testing.
-  - Fully independent start/stop controls and editable port inputs when stopped.
+  - Simultaneous TCP and UDP listeners on the exact same port to accommodate any HMI or SCADA protocol setting.
 
 - **Intelligent Port Conflict Resolution**:
-  - Automatically checks port availability during startup and manual start.
-  - If a port is occupied by Windows services (e.g., `svchost.exe` / IP Helper on port 5000) or other software, GX2 Bridge automatically steps up by 1 (`port++`) until an open port is found, updating the UI textbox and status in real-time.
+  - Automatically checks TCP and UDP port availability during startup and manual start.
+  - If a port is occupied by Windows services (e.g., `svchost.exe` / IP Helper on port 5000) or other software, NetToGXSim2 automatically steps up by 1 (`port++`) until an open port is found.
+
+- **High-Speed PlcMemoryMirror Architecture**:
+  - In-memory cache mirror with dedicated STA worker thread, delivering sub-millisecond read times with zero GUI freezing.
 
 - **Comprehensive MC Protocol Support**:
   - **QnA 3E Binary & ASCII**:
-    - `0x0101`: CPU Model Type Read (returns standard `Q02UCPU` / `FX3U` identification, enabling seamless handshake with Weintek EasyBuilder Pro, Pro-face, and other HMI drivers).
+    - `0x0101`: CPU Model Type Read (returns standard `Q02UCPU` / `FX3U` identification for instant HMI handshakes).
     - `0x0401`: Batch Read (Bit & Word units).
     - `0x0403`: Random Read (Word & DWord multi-address reading).
     - `0x1401`: Batch Write (Bit & Word units).
+    - `0x1402`: Random Write (Scattered Bit & Word/DWord writes).
   - **A-1E Binary & ASCII** (Legacy A Series & FX Series):
     - Subcommand `0x00`: Read Bit devices.
     - Subcommand `0x01`: Read Word devices.
     - Subcommand `0x02`: Write Bit devices.
     - Subcommand `0x03`: Write Word devices.
-    - Full 12-byte binary frame alignment with zero stream desynchronization.
 
 - **Interactive Hardware Simulation Panel**:
-  - **Inputs Rack (X0 - X7)**: 8 interactive toggle switches with blue LED status indicators. Allows toggling PLC inputs directly from the UI to test ladder logic.
-  - **Outputs Rack (Y0 - Y7)**: 8 glowing green LED indicator lamps that reflect the virtual PLC coil logic in real-time.
+  - **Inputs Rack (X0 - X7)**: 8 interactive toggle switches with blue LED status indicators to force PLC input states.
+  - **Outputs Rack (Y0 - Y7)**: 8 glowing green LED indicator lamps reflecting virtual PLC coil logic in real-time.
 
-- **Direct Register Inspector**:
-  - Inspect any PLC device address (e.g., `D0`, `M100`, `Y0`, `X0`) on demand.
-  - Write single-word values directly to memory registers without external tools.
+- **Background Auto-Update Checker**:
+  - Silently queries GitHub releases on startup and displays non-intrusive update status indicators.
 
 - **GX Simulator 2 Process Manager**:
-  - Built-in **"Exit GX Simulator 2"** feature to cleanly terminate background simulator processes (`SimManager.exe` and `IOSystem.exe`) without needing Windows Task Manager.
+  - Built-in **"Exit GX Simulator 2"** feature to cleanly terminate background simulator processes (`SimManager.exe` and `IOSystem.exe`).
 
 ---
 
@@ -94,11 +104,11 @@ Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM pr
 | **Operating System** | Windows 7 / 8 / 10 / 11 (32-bit or 64-bit) |
 | **Runtime** | .NET Framework 4.7.2 or higher |
 | **PLC Software** | Mitsubishi **GX Works 2** (with GX Simulator 2 installed) |
-| **COM Components** | MELSOFT Communication Library (`ActUtlType.ActUtlType`) |
+| **COM Components** | MELSOFT Communication Library (`ActProgType` / `ActUtlType`) |
 
 > [!IMPORTANT]
 > **GX Simulator 2 vs GX Simulator 3:**  
-> This software is specifically engineered for **GX Simulator 2** (bundled with **GX Works 2**). It is **not** compatible with GX Works 3 / GX Simulator 3, which uses a completely different communication architecture.
+> This software is specifically engineered for **GX Simulator 2** (bundled with **GX Works 2**).
 
 ---
 
@@ -111,10 +121,10 @@ Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM pr
 
 > [!WARNING]
 > **Do NOT alter Transfer Setup in GX Works 2!**  
-> In GX Works 2 under **Connection Destination → Transfer Setup**, keep the connection set to **GX Simulator 2** (default). Do not change it to Ethernet Board. GX Works 2 communicates with the simulator internally; only your external devices (HMI/SCADA) communicate via Ethernet with GX2 Bridge.
+> In GX Works 2 under **Connection Destination → Transfer Setup**, keep the connection set to **GX Simulator 2** (default).
 
-### Step 2: Launch GX2 Bridge
-1. Run `NetToGXSim2.Wpf.exe` (or install via `Setup_NetToGXSim2_v0.3.1.exe`).
+### Step 2: Launch NetToGXSim2
+1. Run `NetToGXSim2.Wpf.exe` (or install via the setup installer).
 2. Verify that the status header badge shows **`GX Sim 2: Connected`** (green).
 3. Verify that **Server 1** shows **`Running on Port 5001`** (or 5000 if unoccupied).
 
@@ -126,7 +136,7 @@ Traditionally, Mitsubishi's GX Simulator 2 runs only as an isolated local COM pr
    - **PLC Type**: `Mitsubishi Q/QnA (Ethernet)` or `Mitsubishi FX3U (Ethernet)`
    - **Interface**: `Ethernet`
    - **IP Address**: `127.0.0.1` (or your host IP if running from an external PC)
-   - **Port**: `5001` (match the port shown on GX2 Bridge Server 1)
+   - **Port**: `5001` (match the port shown on NetToGXSim2 Server 1)
    - **Protocol**: `TCP/IP, Binary Mode`
 3. Launch **On-line Simulation** in EasyBuilder Pro.
 4. The HMI will immediately connect, identify the CPU type, and begin reading/writing tags with zero delay.
@@ -155,13 +165,13 @@ mc.batchwrite_wordunits(headdevice="D0", values=[1234])
 ### 1. MELSOFT Application Error `<ES:01808007>`
 - **Cause**: GX Works 2 lost communication with the local simulation process (`SimManager.exe`). This occurs if Transfer Setup in GX Works 2 was mistakenly configured as an external Ethernet module, or if the simulation engine was killed.
 - **Solution**:
-  1. Click **Exit GX Simulator 2** in GX2 Bridge.
+  1. Click **Exit GX Simulator 2** in NetToGXSim2.
   2. In GX Works 2, go to **Debug** → **Stop Simulation**, then **Start/Stop Simulation** again.
   3. Ensure **Connection Destination** in GX Works 2 remains set to **GX Simulator 2**.
 
 ### 2. Port 5000 Automatically Changes to 5001
 - **Cause**: Port 5000 is reserved or actively listened on by Windows system services (`svchost.exe` / IP Helper & SSDP).
-- **Behavior**: This is normal and expected. GX2 Bridge automatically detects this conflict and increments to port 5001 to prevent connection timeouts. Simply configure your HMI/client to port `5001`.
+- **Behavior**: This is normal and expected. NetToGXSim2 automatically detects this conflict and increments to port 5001 to prevent connection timeouts. Simply configure your HMI/client to port `5001`.
 
 ### 3. "ActUtlType COM component not registered"
 - **Cause**: Mitsubishi MELSOFT communication libraries are not installed or are 64-bit only without 32-bit COM registration.
@@ -179,8 +189,8 @@ mc.batchwrite_wordunits(headdevice="D0", values=[1234])
 ### Build Steps
 ```bash
 # Clone the repository
-git clone https://github.com/ismaillowkey/NetToGX2Sim.git
-cd NetToGX2Sim
+git clone https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2.git
+cd Mitsubishi-NetToGXSim2
 
 # Build the WPF project
 dotnet build src/NetToGXSim2.Wpf/NetToGXSim2.Wpf.csproj -c Release
@@ -197,8 +207,8 @@ create_installer.bat
 ## 👤 Author & Support
 
 - **Developer**: Ismail Lowkey
-- **Repository**: [ismaillowkey/NetToGX2Sim](https://github.com/ismaillowkey/NetToGX2Sim)
-- **Version**: 0.3.1
+- **Repository**: [ismaillowkey/Mitsubishi-NetToGXSim2](https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2)
+- **Version**: 0.5.2
 
 ---
 

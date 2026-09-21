@@ -100,48 +100,120 @@ namespace NetToGXSim2.Core
                 DisconnectInternal();
                 try
                 {
-                    Type? comType = Type.GetTypeFromProgID("ActUtlType.ActUtlType");
-                    if (comType == null)
-                    {
-                        comType = Type.GetTypeFromProgID("ActUtlType.ActUtlType.1");
-                    }
+                    // 1. Direct GX Simulator 2 Connection (Zero-Configuration, direct engine probe)
+                    Type? progType = Type.GetTypeFromProgID("ActProgType.ActProgType")
+                                  ?? Type.GetTypeFromProgID("ActProgType.ActProgType.1")
+                                  ?? Type.GetTypeFromProgID("ActProgType.ActMLProgType")
+                                  ?? Type.GetTypeFromProgID("ActProgType64.ActProgWrap");
 
-                    if (comType == null)
+                    if (progType != null)
                     {
-                        LastError = "ActUtlType COM component is not registered on this system.";
-                        LogMessage?.Invoke($"[ERROR] {LastError}");
-                        return false;
-                    }
-
-                    _comObject = Activator.CreateInstance(comType);
-                    if (_comObject == null)
-                    {
-                        LastError = "Failed to create ActUtlType COM instance.";
-                        LogMessage?.Invoke($"[ERROR] {LastError}");
-                        return false;
-                    }
-
-                    _comObject.ActLogicalStationNumber = LogicalStationNumber;
-                    int result = (int)_comObject.Open();
-
-                    if (result == 0)
-                    {
-                        IsConnected = true;
-                        LastError = string.Empty;
-                        LogMessage?.Invoke($"[GX SIM] Connected to GX Simulator 2 (Station {LogicalStationNumber})");
-                        if (MemoryMirror != null && MemoryMirror.IsActive)
+                        dynamic? prog = Activator.CreateInstance(progType);
+                        if (prog != null)
                         {
-                            MemoryMirror.Start();
+                            // Unit Types:
+                            // 0x1A = UNIT_GX_WORKS2_SIM (Direct GX Works 2 / GX Simulator 2 Engine Interface)
+                            // 0x0D = UNIT_GPPW_GXSIM (Direct GX Developer / GX Simulator 1 Interface)
+                            // 0x30 = UNIT_GX_WORKS3_SIM (Direct GX Works 3 Simulator Interface)
+                            // 0x01 = UNIT_CPU
+                            int[] unitTypes = new int[] { 0x1A, 0x0D, 0x30, 0x01 };
+
+                            // CPU Types for FX and Q Series:
+                            // 0x0204 = FX3U/FX3UC
+                            // 0x0205 = FX3G/FX3GC
+                            // 0x0206 = FX3S
+                            // 0x0203 = FX2N/FX2NC
+                            // 0x0202 = FX1N/FX1NC
+                            // 0x0201 = FX0N/FX1
+                            // 0x0210 = FX5U
+                            // 0x0212 = FX5UJ
+                            // 0x00A0 = Q00J
+                            // 0x00A1 = Q00
+                            // 0x00A2 = Q01
+                            // 0x0090 = Q02
+                            int[] cpuTypes = new int[] { 0x0204, 0x0205, 0x0206, 0x0203, 0x0202, 0x0201, 0x0210, 0x0212, 0x00A0, 0x00A1, 0x0090 };
+
+                            foreach (int u in unitTypes)
+                            {
+                                foreach (int cpu in cpuTypes)
+                                {
+                                    for (int sim = 0; sim <= 1; sim++)
+                                    {
+                                        try
+                                        {
+                                            prog.ActUnitType = u;
+                                            prog.ActCpuType = cpu;
+                                            prog.ActTargetSimulator = sim;
+                                            prog.ActProtocolType = 0;
+                                            prog.ActPortNumber = 0;
+                                            prog.ActTimeOut = 1500;
+
+                                            int res = (int)prog.Open();
+                                            if (res == 0)
+                                            {
+                                                _comObject = prog;
+                                                IsConnected = true;
+                                                LastError = string.Empty;
+                                                LogMessage?.Invoke($"[GX SIM] Connected directly to GX Simulator 2 (Direct Mode: Unit=0x{u:X2}, CPU=0x{cpu:X4})");
+                                                if (MemoryMirror != null && MemoryMirror.IsActive)
+                                                {
+                                                    MemoryMirror.Start();
+                                                }
+                                                return true;
+                                            }
+                                        }
+                                        catch { }
+                                    }
+                                }
+                            }
+
+                            // If direct probe didn't connect, release prog instance
+                            try { Marshal.ReleaseComObject(prog); } catch { }
                         }
-                        return true;
                     }
-                    else
+
+                    // 2. Fallback to ActUtlType (Logical Station Mode)
+                    Type? utlType = Type.GetTypeFromProgID("ActUtlType.ActUtlType")
+                                 ?? Type.GetTypeFromProgID("ActUtlType.ActUtlType.1")
+                                 ?? Type.GetTypeFromProgID("ActUtlType.ActMLUtlType")
+                                 ?? Type.GetTypeFromProgID("ActUtlType64.ActUtlWrap");
+
+                    if (utlType != null)
                     {
-                        IsConnected = false;
-                        LastError = $"Open() failed with code 0x{result:X8}";
-                        LogMessage?.Invoke($"[ERROR] {LastError}");
-                        return false;
+                        dynamic? utl = Activator.CreateInstance(utlType);
+                        if (utl != null)
+                        {
+                            int[] stationsToTry = new int[] { LogicalStationNumber, 1, 2, 3, 4, 5 };
+                            foreach (int st in stationsToTry)
+                            {
+                                try
+                                {
+                                    utl.ActLogicalStationNumber = st;
+                                    int res = (int)utl.Open();
+                                    if (res == 0)
+                                    {
+                                        _comObject = utl;
+                                        LogicalStationNumber = st;
+                                        IsConnected = true;
+                                        LastError = string.Empty;
+                                        LogMessage?.Invoke($"[GX SIM] Connected to GX Simulator 2 (Station {st})");
+                                        if (MemoryMirror != null && MemoryMirror.IsActive)
+                                        {
+                                            MemoryMirror.Start();
+                                        }
+                                        return true;
+                                    }
+                                }
+                                catch { }
+                            }
+                            try { Marshal.ReleaseComObject(utl); } catch { }
+                        }
                     }
+
+                    IsConnected = false;
+                    LastError = "Could not connect to GX Simulator 2. Make sure simulation is running in GX Works 2.";
+                    LogMessage?.Invoke($"[WARNING] {LastError}");
+                    return false;
                 }
                 catch (Exception ex)
                 {

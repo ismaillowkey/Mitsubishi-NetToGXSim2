@@ -7,6 +7,13 @@ using System.Threading.Tasks;
 
 namespace NetToGXSim2.Core
 {
+    public enum ServerTransportMode
+    {
+        Both,
+        TcpOnly,
+        UdpOnly
+    }
+
     public class McProtocolServer
     {
         private Socket? _listener;
@@ -15,61 +22,69 @@ namespace NetToGXSim2.Core
         private readonly GxSimulatorEngine _engine;
         private readonly List<Socket> _clients = new List<Socket>();
 
-        public string Name { get; set; } = "MC Protocol (TCP/UDP)";
+        public string Name { get; set; } = "MC Protocol";
+        public ServerTransportMode TransportMode { get; set; } = ServerTransportMode.Both;
         public int Port { get; private set; } = 5000;
         public bool IsRunning { get; private set; }
         public long RequestsProcessed { get; private set; }
 
         public event Action<string>? LogMessage;
 
-        public McProtocolServer(GxSimulatorEngine engine, string name = "MC Protocol (TCP/UDP)", int defaultPort = 5000)
+        public McProtocolServer(GxSimulatorEngine engine, string name = "MC Protocol", int defaultPort = 5000, ServerTransportMode transportMode = ServerTransportMode.Both)
         {
             _engine = engine;
             Name = name;
             Port = defaultPort;
+            TransportMode = transportMode;
         }
 
-        public static bool IsPortAvailable(int port)
+        public static bool IsPortAvailable(int port, ServerTransportMode mode = ServerTransportMode.Both)
         {
             try
             {
                 var ipGlobal = System.Net.NetworkInformation.IPGlobalProperties.GetIPGlobalProperties();
 
-                // 1. Check all active TCP listeners
-                var listeners = ipGlobal.GetActiveTcpListeners();
-                foreach (var ep in listeners)
+                if (mode == ServerTransportMode.Both || mode == ServerTransportMode.TcpOnly)
                 {
-                    if (ep.Port == port) return false;
+                    // 1. Check all active TCP listeners
+                    var listeners = ipGlobal.GetActiveTcpListeners();
+                    foreach (var ep in listeners)
+                    {
+                        if (ep.Port == port) return false;
+                    }
+
+                    // 2. Check active TCP connections
+                    var connections = ipGlobal.GetActiveTcpConnections();
+                    foreach (var conn in connections)
+                    {
+                        if (conn.LocalEndPoint.Port == port) return false;
+                    }
+
+                    // 3. Test binding exclusively TCP
+                    using (var testSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
+                    {
+                        testSocket.ExclusiveAddressUse = true;
+                        testSocket.Bind(new IPEndPoint(IPAddress.Any, port));
+                        testSocket.Close();
+                    }
                 }
 
-                // 2. Check active TCP connections
-                var connections = ipGlobal.GetActiveTcpConnections();
-                foreach (var conn in connections)
+                if (mode == ServerTransportMode.Both || mode == ServerTransportMode.UdpOnly)
                 {
-                    if (conn.LocalEndPoint.Port == port) return false;
-                }
+                    // 4. Check active UDP listeners
+                    var udpListeners = ipGlobal.GetActiveUdpListeners();
+                    foreach (var ep in udpListeners)
+                    {
+                        if (ep.Port == port) return false;
+                    }
 
-                // 3. Check active UDP listeners
-                var udpListeners = ipGlobal.GetActiveUdpListeners();
-                foreach (var ep in udpListeners)
-                {
-                    if (ep.Port == port) return false;
-                }
-
-                // 4. Test binding exclusively TCP
-                using (var testSocket = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp))
-                {
-                    testSocket.ExclusiveAddressUse = true;
-                    testSocket.Bind(new IPEndPoint(IPAddress.Any, port));
-                    testSocket.Close();
-                }
-
-                // 5. Test binding exclusively UDP
-                using (var testUdp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
-                {
-                    testUdp.ExclusiveAddressUse = true;
-                    testUdp.Bind(new IPEndPoint(IPAddress.Any, port));
-                    testUdp.Close();
+                    // 5. Test binding exclusively UDP
+                    using (var testUdp = new Socket(AddressFamily.InterNetwork, SocketType.Dgram, ProtocolType.Udp))
+                    {
+                        testUdp.ExclusiveAddressUse = true;
+                        testUdp.Bind(new IPEndPoint(IPAddress.Any, port));
+                        testUdp.Close();
+                    }
                 }
 
                 return true;
@@ -80,12 +95,12 @@ namespace NetToGXSim2.Core
             }
         }
 
-        public static int GetNextAvailablePort(int startingPort)
+        public static int GetNextAvailablePort(int startingPort, ServerTransportMode mode = ServerTransportMode.Both)
         {
             int p = Math.Max(1, startingPort);
             while (p <= 65535)
             {
-                if (IsPortAvailable(p)) return p;
+                if (IsPortAvailable(p, mode)) return p;
                 p++;
             }
             return startingPort;
@@ -96,29 +111,35 @@ namespace NetToGXSim2.Core
             if (IsRunning) return Port;
 
             // Proactively check if port is available, auto-increment until a free port is found
-            int testPort = GetNextAvailablePort(requestedPort);
+            int testPort = GetNextAvailablePort(requestedPort, TransportMode);
             while (testPort <= 65535)
             {
                 try
                 {
-                    // 1. Start TCP Listener
-                    _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
-                    _listener.ExclusiveAddressUse = true;
-                    _listener.Bind(new IPEndPoint(IPAddress.Any, testPort));
-                    _listener.Listen(100);
-
-                    // 2. Start UDP Listener on the exact same port
-                    _udpClient = new UdpClient();
-                    _udpClient.ExclusiveAddressUse = true;
-                    _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, testPort));
-
-                    // Fix Windows UDP WSAECONNRESET (10054) issue
-                    try
+                    if (TransportMode == ServerTransportMode.Both || TransportMode == ServerTransportMode.TcpOnly)
                     {
-                        const int SIO_UDP_CONNRESET = -1744830452;
-                        _udpClient.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+                        // 1. Start TCP Listener
+                        _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
+                        _listener.ExclusiveAddressUse = true;
+                        _listener.Bind(new IPEndPoint(IPAddress.Any, testPort));
+                        _listener.Listen(100);
                     }
-                    catch { }
+
+                    if (TransportMode == ServerTransportMode.Both || TransportMode == ServerTransportMode.UdpOnly)
+                    {
+                        // 2. Start UDP Listener
+                        _udpClient = new UdpClient();
+                        _udpClient.ExclusiveAddressUse = true;
+                        _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, testPort));
+
+                        // Fix Windows UDP WSAECONNRESET (10054) issue
+                        try
+                        {
+                            const int SIO_UDP_CONNRESET = -1744830452;
+                            _udpClient.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
+                        }
+                        catch { }
+                    }
 
                     Port = testPort;
                     IsRunning = true;
@@ -128,16 +149,18 @@ namespace NetToGXSim2.Core
                     {
                         LogMessage?.Invoke($"[{Name}] Port {requestedPort} in use! Automatically switched to port {Port}.");
                     }
-                    LogMessage?.Invoke($"[{Name}] Started listening on TCP & UDP Port {Port}");
 
-                    Task.Run(() => AcceptLoop(_cts.Token));
-                    Task.Run(() => UdpReceiveLoop(_cts.Token));
+                    string modeDesc = TransportMode == ServerTransportMode.Both ? "TCP & UDP" : TransportMode.ToString().Replace("Only", "");
+                    LogMessage?.Invoke($"[{Name}] Started listening on {modeDesc} Port {Port}");
+
+                    if (_listener != null) Task.Run(() => AcceptLoop(_cts.Token));
+                    if (_udpClient != null) Task.Run(() => UdpReceiveLoop(_cts.Token));
                     return Port;
                 }
                 catch (SocketException)
                 {
                     CleanupSockets();
-                    testPort = GetNextAvailablePort(testPort + 1);
+                    testPort = GetNextAvailablePort(testPort + 1, TransportMode);
                 }
                 catch (Exception ex)
                 {
@@ -179,7 +202,8 @@ namespace NetToGXSim2.Core
                 _clients.Clear();
             }
 
-            LogMessage?.Invoke($"[{Name}] Server stopped (TCP/UDP)");
+            string modeDesc = TransportMode == ServerTransportMode.Both ? "TCP/UDP" : TransportMode.ToString().Replace("Only", "");
+            LogMessage?.Invoke($"[{Name}] Server stopped ({modeDesc})");
         }
 
         #region TCP Handling

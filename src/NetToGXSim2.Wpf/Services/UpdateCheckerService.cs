@@ -17,9 +17,9 @@ namespace NetToGXSim2.Wpf.Services
 
     public static class UpdateCheckerService
     {
-        public const string CurrentVersion = "0.3.2";
-        public const string ReleasesPageUrl = "https://github.com/ismaillowkey/NetToGX2Sim/releases";
-        public const string LatestReleaseApiUrl = "https://api.github.com/repos/ismaillowkey/NetToGX2Sim/releases/latest";
+        public const string CurrentVersion = "0.5.2";
+        public const string ReleasesPageUrl = "https://github.com/ismaillowkey/Mitsubishi-NetToGXSim2/releases";
+        public const string LatestReleaseApiUrl = "https://api.github.com/repos/ismaillowkey/Mitsubishi-NetToGXSim2/releases/latest";
 
         public static async Task<UpdateCheckResult> CheckForUpdatesAsync()
         {

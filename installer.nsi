@@ -1,6 +1,6 @@
 ; ==============================================================================
-; NSIS Script: GX2 Bridge Installer
-; Version: 0.3.2
+; NSIS Script: NetToGXSim2 Installer
+; Version: 0.5.2
 ; Developed by: Ismail Lowkey
 ; ==============================================================================
 
@@ -10,12 +10,13 @@
 ; --------------------------------------------------
 ; General Definitions
 ; --------------------------------------------------
-!define PRODUCT_NAME "GX2 Bridge by Ismail Lowkey"
-!define PRODUCT_SHORT_NAME "GX2 Bridge"
-!define PRODUCT_VERSION "0.3.2"
+!define PRODUCT_NAME "NetToGXSim2 by Ismail Lowkey"
+!define PRODUCT_SHORT_NAME "NetToGXSim2"
+!define PRODUCT_VERSION "0.5.2"
 !define PRODUCT_PUBLISHER "Ismail Lowkey"
 !define MAIN_EXE "NetToGXSim2.Wpf.exe"
-!define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\GX2Bridge"
+!define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NetToGXSim2"
+!define OLD_REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\GX2Bridge"
 
 Name "${PRODUCT_NAME}"
 OutFile "Setup_NetToGXSim2_v${PRODUCT_VERSION}.exe"
@@ -40,7 +41,7 @@ BrandingText "${PRODUCT_NAME} v${PRODUCT_VERSION}"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !define MUI_FINISHPAGE_RUN "$INSTDIR\${MAIN_EXE}"
-!define MUI_FINISHPAGE_RUN_TEXT "Jalankan ${PRODUCT_SHORT_NAME} sekarang"
+!define MUI_FINISHPAGE_RUN_TEXT "Launch ${PRODUCT_SHORT_NAME} now"
 !insertmacro MUI_PAGE_FINISH
 
 ; --------------------------------------------------
@@ -59,6 +60,15 @@ BrandingText "${PRODUCT_NAME} v${PRODUCT_VERSION}"
 ; Installer Section
 ; --------------------------------------------------
 Section "MainSection" SEC01
+    ; Clean up old legacy shortcuts and registry keys if upgrading
+    Delete "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\GX2 Bridge.lnk"
+    Delete "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\GX2Bridge.lnk"
+    Delete "$SMPROGRAMS\MELSOFT NetToGXSim\GX2 Bridge.lnk"
+    Delete "$SMPROGRAMS\MELSOFT NetToGXSim\GX2Bridge.lnk"
+    Delete "$DESKTOP\GX2 Bridge.lnk"
+    Delete "$DESKTOP\GX2Bridge.lnk"
+    DeleteRegKey HKLM "${OLD_REG_KEY}"
+
     SetOutPath "$INSTDIR"
     SetOverwrite on
 
@@ -73,15 +83,14 @@ Section "MainSection" SEC01
     WriteUninstaller "$INSTDIR\Uninstall.exe"
 
     ; ----------------------------------------------
-    ; Start Menu Shortcuts:
-    ; start menu -> melsoft netToGxSIm -> folder NetToGXSIM2 -> shortcut disini
+    ; Start Menu Shortcuts
     ; ----------------------------------------------
     CreateDirectory "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2"
-    CreateShortcut "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\GX2 Bridge.lnk" "$INSTDIR\${MAIN_EXE}" "" "$INSTDIR\${MAIN_EXE}" 0
+    CreateShortcut "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\NetToGXSim2.lnk" "$INSTDIR\${MAIN_EXE}" "" "$INSTDIR\Resources\app_icon.ico" 0
     CreateShortcut "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\Uninstall.lnk" "$INSTDIR\Uninstall.exe" "" "$INSTDIR\Uninstall.exe" 0
 
     ; Desktop Shortcut
-    CreateShortcut "$DESKTOP\GX2 Bridge.lnk" "$INSTDIR\${MAIN_EXE}" "" "$INSTDIR\${MAIN_EXE}" 0
+    CreateShortcut "$DESKTOP\NetToGXSim2.lnk" "$INSTDIR\${MAIN_EXE}" "" "$INSTDIR\Resources\app_icon.ico" 0
 
     ; ----------------------------------------------
     ; Registry Entries for Add/Remove Programs
@@ -89,7 +98,7 @@ Section "MainSection" SEC01
     WriteRegStr HKLM "${REG_KEY}" "DisplayName" "${PRODUCT_NAME}"
     WriteRegStr HKLM "${REG_KEY}" "DisplayVersion" "${PRODUCT_VERSION}"
     WriteRegStr HKLM "${REG_KEY}" "Publisher" "${PRODUCT_PUBLISHER}"
-    WriteRegStr HKLM "${REG_KEY}" "DisplayIcon" "$INSTDIR\${MAIN_EXE},0"
+    WriteRegStr HKLM "${REG_KEY}" "DisplayIcon" "$INSTDIR\Resources\app_icon.ico,0"
     WriteRegStr HKLM "${REG_KEY}" "UninstallString" '"$INSTDIR\Uninstall.exe"'
     WriteRegStr HKLM "${REG_KEY}" "QuietUninstallString" '"$INSTDIR\Uninstall.exe" /S'
     WriteRegStr HKLM "${REG_KEY}" "InstallLocation" "$INSTDIR"
@@ -100,6 +109,9 @@ Section "MainSection" SEC01
     ${GetSize} "$INSTDIR" "/S=0K" $0 $1 $2
     IntFmt $0 "0x%08X" $0
     WriteRegDWORD HKLM "${REG_KEY}" "EstimatedSize" "$0"
+
+    ; Notify Windows Explorer to refresh icon cache immediately
+    System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
 SectionEnd
 
 ; --------------------------------------------------
@@ -110,7 +122,9 @@ Section "Uninstall"
     ExecWait 'taskkill /F /IM ${MAIN_EXE}'
 
     ; Remove Shortcuts
+    Delete "$DESKTOP\NetToGXSim2.lnk"
     Delete "$DESKTOP\GX2 Bridge.lnk"
+    Delete "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\NetToGXSim2.lnk"
     Delete "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\GX2 Bridge.lnk"
     Delete "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2\Uninstall.lnk"
     RMDir "$SMPROGRAMS\MELSOFT NetToGXSim\NetToGXSim2"
@@ -124,4 +138,8 @@ Section "Uninstall"
 
     ; Remove Registry Keys
     DeleteRegKey HKLM "${REG_KEY}"
+    DeleteRegKey HKLM "${OLD_REG_KEY}"
+
+    ; Refresh icon cache on uninstall
+    System::Call 'shell32.dll::SHChangeNotify(i, i, i, i) v (0x08000000, 0, 0, 0)'
 SectionEnd

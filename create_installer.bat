@@ -2,7 +2,7 @@
 setlocal
 
 echo ======================================================================
-echo    GX2 Bridge v0.3.1 - Build ^& Create Installer
+echo    NetToGXSim2 v0.5.2 - Build ^& Create Installer
 echo    Developed by: Ismail Lowkey
 echo ======================================================================
 echo.
@@ -10,19 +10,19 @@ echo.
 cd /d "%~dp0"
 
 :: 1. Publish WPF Application in Release Mode
-echo [1/3] Mem-publish aplikasi dalam mode Release...
+echo [1/3] Publishing WPF application in Release mode...
 dotnet publish "src\NetToGXSim2.Wpf\NetToGXSim2.Wpf.csproj" -c Release -o "publish"
 if errorlevel 1 (
     echo.
-    echo [ERROR] Gagal mem-publish proyek WPF! Silakan periksa error di atas.
+    echo [ERROR] Failed to publish WPF project! Please check the build errors above.
     pause
     exit /b 1
 )
-echo [OK] Publish selesai di folder publish.
+echo [OK] Publish completed to publish folder.
 echo.
 
-:: 2. Cari compiler NSIS
-echo [2/3] Mencari NSIS Compiler makensis.exe...
+:: 2. Find NSIS compiler
+echo [2/3] Searching for NSIS Compiler makensis.exe...
 set "NSIS_PATH="
 
 if exist "C:\Program Files (x86)\NSIS\makensis.exe" set "NSIS_PATH=C:\Program Files (x86)\NSIS\makensis.exe"
@@ -35,23 +35,23 @@ if not defined NSIS_PATH (
 
 if not defined NSIS_PATH goto :NsisNotFound
 
-echo [OK] Menggunakan NSIS di: "%NSIS_PATH%"
+echo [OK] Found NSIS compiler at: "%NSIS_PATH%"
 echo.
 
-:: 3. Compile installer dengan NSIS
-echo [3/3] Meng-compile installer.nsi...
+:: 3. Compile installer with NSIS
+echo [3/3] Compiling installer.nsi...
 "%NSIS_PATH%" /V2 "installer.nsi"
 if errorlevel 1 (
     echo.
-    echo [ERROR] Gagal membuat installer dengan NSIS!
+    echo [ERROR] Failed to build installer with NSIS!
     pause
     exit /b 1
 )
 
 echo.
 echo ======================================================================
-echo  [SUCCESS] Installer berhasil dibuat!
-echo  File: Setup_NetToGXSim2_v0.3.2.exe
+echo  [SUCCESS] Installer built successfully!
+echo  File: Setup_NetToGXSim2_v0.5.2.exe
 echo ======================================================================
 echo.
 pause
@@ -59,8 +59,8 @@ exit /b 0
 
 :NsisNotFound
 echo.
-echo [ERROR] NSIS compiler makensis.exe tidak ditemukan!
-echo Silakan install NSIS dari https://nsis.sourceforge.io/
-echo atau pastikan makensis.exe terpasang di Program Files.
+echo [ERROR] NSIS compiler makensis.exe was not found!
+echo Please install NSIS from https://nsis.sourceforge.io/
+echo or ensure makensis.exe is in your system PATH or Program Files.
 pause
 exit /b 1

@@ -44,16 +44,16 @@ namespace NetToGXSim2.Wpf.Views
             InitializeInputRack();
             InitializeOutputRack();
 
-            // Server 1 (Top): Port 5000 (Started by default, auto-increment if in use)
-            int s1Port = McProtocolServer.GetNextAvailablePort(5000);
-            _mcServer1 = new McProtocolServer(_simEngine, "MC Server 1", s1Port);
+            // Server 1 (Top): Port 5000 (Started by default, auto-increment if in use) -> MC TCP Binary Server
+            int s1Port = McProtocolServer.GetNextAvailablePort(5000, ServerTransportMode.TcpOnly);
+            _mcServer1 = new McProtocolServer(_simEngine, "MC TCP Server", s1Port, ServerTransportMode.TcpOnly);
             _mcServer1.LogMessage += (msg) => Dispatcher.InvokeAsync(() => Log(msg));
             _mcServer1.Start(s1Port);
             UpdateServer1Ui();
 
-            // Server 2 (Bottom): Port 6000 (Stopped by default, check available port)
-            int s2Port = McProtocolServer.GetNextAvailablePort(6000);
-            _mcServer2 = new McProtocolServer(_simEngine, "MC Server 2", s2Port);
+            // Server 2 (Bottom): Port 6000 (Stopped by default, check available port) -> MC UDP Binary Server
+            int s2Port = McProtocolServer.GetNextAvailablePort(6000, ServerTransportMode.UdpOnly);
+            _mcServer2 = new McProtocolServer(_simEngine, "MC UDP Server", s2Port, ServerTransportMode.UdpOnly);
             _mcServer2.LogMessage += (msg) => Dispatcher.InvokeAsync(() => Log(msg));
             UpdateServer2Ui();
 
@@ -99,11 +99,11 @@ namespace NetToGXSim2.Wpf.Views
                             UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(2, 132, 199));
 
                             var answer = MessageBox.Show(
-                                $"A new version of GX2 Bridge is available!\n\n" +
+                                $"A new version of NetToGXSim2 is available!\n\n" +
                                 $"Current Version: v{UpdateCheckerService.CurrentVersion}\n" +
                                 $"Latest Version: {result.LatestVersion}\n\n" +
                                 $"Would you like to open the download page to update now?",
-                                "Update Available - GX2 Bridge",
+                                "Update Available - NetToGXSim2",
                                 MessageBoxButton.YesNo,
                                 MessageBoxImage.Information);
 
@@ -137,7 +137,7 @@ namespace NetToGXSim2.Wpf.Views
                 });
             });
 
-            Log($"GX2 Bridge ready. Server 1 on port {_mcServer1.Port} (TCP/UDP).");
+            Log($"NetToGXSim2 ready. MC TCP Server listening on port {_mcServer1.Port}.");
         }
 
         private void InitializeInputRack()
@@ -486,10 +486,10 @@ namespace NetToGXSim2.Wpf.Views
                 int port = 5000;
                 if (int.TryParse(TxtPortServer1.Text.Trim(), out int p)) port = p;
 
-                int availablePort = McProtocolServer.GetNextAvailablePort(port);
+                int availablePort = McProtocolServer.GetNextAvailablePort(port, ServerTransportMode.TcpOnly);
                 if (availablePort != port)
                 {
-                    Log($"[MC Server 1] Port {port} sedang terpakai! Otomatis dinaikkan ke port {availablePort}.");
+                    Log($"[MC TCP Server] Port {port} is occupied! Automatically switched to port {availablePort}.");
                 }
                 _mcServer1.Start(availablePort);
             }
@@ -507,10 +507,10 @@ namespace NetToGXSim2.Wpf.Views
                 int port = 6000;
                 if (int.TryParse(TxtPortServer2.Text.Trim(), out int p)) port = p;
 
-                int availablePort = McProtocolServer.GetNextAvailablePort(port);
+                int availablePort = McProtocolServer.GetNextAvailablePort(port, ServerTransportMode.UdpOnly);
                 if (availablePort != port)
                 {
-                    Log($"[MC Server 2] Port {port} sedang terpakai! Otomatis dinaikkan ke port {availablePort}.");
+                    Log($"[MC UDP Server] Port {port} is occupied! Automatically switched to port {availablePort}.");
                 }
                 _mcServer2.Start(availablePort);
             }
@@ -614,7 +614,7 @@ namespace NetToGXSim2.Wpf.Views
         private void MenuGuide_Click(object sender, RoutedEventArgs e)
         {
             MessageBox.Show(
-                "GX2 Bridge Guide:\n\n" +
+                "NetToGXSim2 Guide:\n\n" +
                 "1. Inputs X0-X7 can be toggled using switches in Tab 1.\n" +
                 "2. Outputs Y0-Y7 display real-time PLC output states.\n" +
                 "3. MC Protocol Servers: Server 1 (port 5000) and Server 2 (port 6000).\n" +
@@ -641,11 +641,11 @@ namespace NetToGXSim2.Wpf.Views
                         UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(2, 132, 199));
 
                         var answer = MessageBox.Show(
-                            $"A new version of GX2 Bridge is available!\n\n" +
+                            $"A new version of NetToGXSim2 is available!\n\n" +
                             $"Current Version: v{UpdateCheckerService.CurrentVersion}\n" +
                             $"Latest Version: {result.LatestVersion}\n\n" +
                             $"Would you like to open the download page to update now?",
-                            "Update Available - GX2 Bridge",
+                            "Update Available - NetToGXSim2",
                             MessageBoxButton.YesNo,
                             MessageBoxImage.Information);
 
@@ -669,7 +669,7 @@ namespace NetToGXSim2.Wpf.Views
                         UpdateStatusLed.Fill = new SolidColorBrush(Color.FromRgb(16, 185, 129));
 
                         MessageBox.Show(
-                            $"You are using the latest version of GX2 Bridge (v{UpdateCheckerService.CurrentVersion}).",
+                            $"You are using the latest version of NetToGXSim2 (v{UpdateCheckerService.CurrentVersion}).",
                             "Check for Updates",
                             MessageBoxButton.OK,
                             MessageBoxImage.Information);
@@ -723,7 +723,7 @@ namespace NetToGXSim2.Wpf.Views
 
         private void MenuAbout_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show($"GX2 Bridge v{UpdateCheckerService.CurrentVersion}\nMitsubishi GX Works 2 Simulator Network Bridge\n\nDeveloped by Ismail Lowkey", "About GX2 Bridge", MessageBoxButton.OK, MessageBoxImage.Information);
+            MessageBox.Show($"NetToGXSim2 v{UpdateCheckerService.CurrentVersion}\nMitsubishi GX Works 2 Simulator Network Bridge\n\nDeveloped by Ismail Lowkey", "About NetToGXSim2", MessageBoxButton.OK, MessageBoxImage.Information);
         }
 
         protected override void OnClosed(EventArgs e)
