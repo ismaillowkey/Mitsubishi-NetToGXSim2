@@ -1,6 +1,6 @@
 ; ==============================================================================
 ; NSIS Script: NetToGXSim2 Installer
-; Version: 0.5.4
+; Version: 0.6.0
 ; Developed by: Ismail Lowkey
 ; ==============================================================================
 
@@ -12,7 +12,7 @@
 ; --------------------------------------------------
 !define PRODUCT_NAME "NetToGXSim2 by Ismail Lowkey"
 !define PRODUCT_SHORT_NAME "NetToGXSim2"
-!define PRODUCT_VERSION "0.5.4"
+!define PRODUCT_VERSION "0.6.0"
 !define PRODUCT_PUBLISHER "Ismail Lowkey"
 !define MAIN_EXE "NetToGXSim2.Wpf.exe"
 !define REG_KEY "Software\Microsoft\Windows\CurrentVersion\Uninstall\NetToGXSim2"

@@ -25,6 +25,28 @@ namespace NetToGXSim2.Wpf
         private const int SW_RESTORE = 9;
         private const int SW_SHOW = 5;
 
+        public App()
+        {
+            DispatcherUnhandledException += (s, e) =>
+            {
+                try
+                {
+                    string logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log");
+                    System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] DISPATCHER EXCEPTION: {e.Exception}\n");
+                }
+                catch { }
+            };
+            AppDomain.CurrentDomain.UnhandledException += (s, e) =>
+            {
+                try
+                {
+                    string logPath = System.IO.Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "startup.log");
+                    System.IO.File.AppendAllText(logPath, $"[{DateTime.Now:HH:mm:ss.fff}] APPDOMAIN EXCEPTION: {e.ExceptionObject}\n");
+                }
+                catch { }
+            };
+        }
+
         protected override void OnStartup(StartupEventArgs e)
         {
             try

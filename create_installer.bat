@@ -2,7 +2,7 @@
 setlocal
 
 echo ======================================================================
-echo    NetToGXSim2 v0.5.4 - Build ^& Create Installer
+echo    NetToGXSim2 v0.6.0 - Build ^& Create Installer
 echo    Developed by: Ismail Lowkey
 echo ======================================================================
 echo.
@@ -51,7 +51,7 @@ if errorlevel 1 (
 echo.
 echo ======================================================================
 echo  [SUCCESS] Installer built successfully!
-echo  File: Setup_NetToGXSim2_v0.5.4.exe
+echo  File: Setup_NetToGXSim2_v0.6.0.exe
 echo ======================================================================
 echo.
 pause

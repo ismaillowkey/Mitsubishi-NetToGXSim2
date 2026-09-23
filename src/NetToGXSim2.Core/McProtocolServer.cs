@@ -118,86 +118,76 @@ namespace NetToGXSim2.Core
                 {
                     if (TransportMode == ServerTransportMode.Both || TransportMode == ServerTransportMode.TcpOnly)
                     {
-                        // 1. Start TCP Listener
                         _listener = new Socket(AddressFamily.InterNetwork, SocketType.Stream, ProtocolType.Tcp);
                         _listener.ExclusiveAddressUse = true;
                         _listener.Bind(new IPEndPoint(IPAddress.Any, testPort));
-                        _listener.Listen(100);
+                        _listener.Listen(50);
                     }
 
                     if (TransportMode == ServerTransportMode.Both || TransportMode == ServerTransportMode.UdpOnly)
                     {
-                        // 2. Start UDP Listener
-                        _udpClient = new UdpClient();
-                        _udpClient.ExclusiveAddressUse = true;
-                        _udpClient.Client.Bind(new IPEndPoint(IPAddress.Any, testPort));
-
-                        // Fix Windows UDP WSAECONNRESET (10054) issue
-                        try
-                        {
-                            const int SIO_UDP_CONNRESET = -1744830452;
-                            _udpClient.Client.IOControl((IOControlCode)SIO_UDP_CONNRESET, new byte[] { 0, 0, 0, 0 }, null);
-                        }
-                        catch { }
+                        _udpClient = new UdpClient(new IPEndPoint(IPAddress.Any, testPort));
+                        _udpClient.EnableBroadcast = true;
                     }
 
                     Port = testPort;
-                    IsRunning = true;
-                    _cts = new CancellationTokenSource();
-
-                    if (testPort != requestedPort)
-                    {
-                        LogMessage?.Invoke($"[{Name}] Port {requestedPort} in use! Automatically switched to port {Port}.");
-                    }
-
-                    string modeDesc = TransportMode == ServerTransportMode.Both ? "TCP & UDP" : TransportMode.ToString().Replace("Only", "");
-                    LogMessage?.Invoke($"[{Name}] Started listening on {modeDesc} Port {Port}");
-
-                    if (_listener != null) Task.Run(() => AcceptLoop(_cts.Token));
-                    if (_udpClient != null) Task.Run(() => UdpReceiveLoop(_cts.Token));
-                    return Port;
+                    break;
                 }
                 catch (SocketException)
                 {
-                    CleanupSockets();
+                    // Clean up partially created resources
+                    try { _listener?.Close(); } catch { }
+                    try { _udpClient?.Close(); } catch { }
+                    _listener = null;
+                    _udpClient = null;
+
                     testPort = GetNextAvailablePort(testPort + 1, TransportMode);
-                }
-                catch (Exception ex)
-                {
-                    CleanupSockets();
-                    IsRunning = false;
-                    LogMessage?.Invoke($"[ERROR] {Name} failed to start on port {testPort}: {ex.Message}");
-                    return -1;
                 }
             }
 
-            IsRunning = false;
-            LogMessage?.Invoke($"[ERROR] {Name}: No available ports found starting from {requestedPort}");
-            return -1;
-        }
+            if (_listener == null && _udpClient == null)
+            {
+                LogMessage?.Invoke($"[{Name}] ERROR: Failed to bind to any available port starting from {requestedPort}.");
+                return Port;
+            }
 
-        private void CleanupSockets()
-        {
-            try { _listener?.Close(); } catch { }
-            _listener = null;
+            _cts = new CancellationTokenSource();
+            IsRunning = true;
 
-            try { _udpClient?.Close(); } catch { }
-            _udpClient = null;
+            string modeDesc = TransportMode == ServerTransportMode.Both ? "TCP/UDP" : TransportMode.ToString().Replace("Only", "");
+            LogMessage?.Invoke($"[{Name}] Server started successfully on port {Port} ({modeDesc}) - Pure On-Demand Passthrough");
+
+            if (_listener != null)
+            {
+                _ = Task.Run(() => AcceptLoop(_cts.Token));
+            }
+
+            if (_udpClient != null)
+            {
+                _ = Task.Run(() => UdpReceiveLoop(_cts.Token));
+            }
+
+            return Port;
         }
 
         public void Stop()
         {
             if (!IsRunning) return;
             IsRunning = false;
+
             _cts?.Cancel();
 
-            CleanupSockets();
+            try { _listener?.Close(); } catch { }
+            _listener = null;
+
+            try { _udpClient?.Close(); } catch { }
+            _udpClient = null;
 
             lock (_clients)
             {
-                foreach (var client in _clients)
+                foreach (var c in _clients)
                 {
-                    try { client.Shutdown(SocketShutdown.Both); client.Close(); } catch { }
+                    try { c.Close(); } catch { }
                 }
                 _clients.Clear();
             }
@@ -524,7 +514,8 @@ namespace NetToGXSim2.Core
                     response[9] = 0x00; response[10] = 0x00;
                     Buffer.BlockCopy(wordPayload, 0, response, 11, wordPayload.Length);
 
-                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    short firstVal = wordVals.Length > 0 ? wordVals[0] : (short)0;
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Read Word {startDevName} x{points} -> OK ({firstVal})");
                     return response;
                 }
             }
@@ -613,7 +604,8 @@ namespace NetToGXSim2.Core
                     short[] wordVals = new short[points];
                     Buffer.BlockCopy(payload, 12, wordVals, 0, points * 2);
                     _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
-                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Write Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    short firstVal = wordVals.Length > 0 ? wordVals[0] : (short)0;
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E] Write Word {startDevName} x{points} -> OK ({firstVal})");
                 }
 
                 ushort respDataLen = 2;
@@ -711,7 +703,7 @@ namespace NetToGXSim2.Core
 
         private byte[] HandleA1EBinary(byte subCommand, byte pcNo, ushort timer, int startAddr, ushort devCode, int points, byte[]? writeData, string protoPrefix = "")
         {
-            string devPrefix = GetA1EDevicePrefix(devCode);
+            string devPrefix = GetA1EDevicePrefix(devCode, subCommand);
             string startDevName = GxSimulatorEngine.StepDeviceName(devPrefix + "0", startAddr);
 
             RequestsProcessed++;
@@ -750,7 +742,8 @@ namespace NetToGXSim2.Core
                         response = new byte[2 + payload.Length];
                         response[0] = 0x81; response[1] = 0x00;
                         Buffer.BlockCopy(payload, 0, response, 2, payload.Length);
-                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                        short firstVal = wordVals.Length > 0 ? wordVals[0] : (short)0;
+                        LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E] Read Word {startDevName} x{points} -> OK ({firstVal})");
                     }
                     break;
 
@@ -840,12 +833,7 @@ namespace NetToGXSim2.Core
                 int startAddr = Convert.ToInt32(sAddr, 10);
                 int points = Convert.ToInt32(sPoints, 16);
 
-                string devPrefix = "D";
-                if (sDevCode == "D*" || sDevCode == "A8") devPrefix = "D";
-                else if (sDevCode == "M*" || sDevCode == "90") devPrefix = "M";
-                else if (sDevCode == "X*" || sDevCode == "9C") devPrefix = "X";
-                else if (sDevCode == "Y*" || sDevCode == "9D") devPrefix = "Y";
-
+                string devPrefix = ParseAsciiDevCode(sDevCode);
                 string startDevName = GxSimulatorEngine.StepDeviceName(devPrefix + "0", startAddr);
 
                 if (sSubCommand == "0001") // Bit Read
@@ -867,7 +855,49 @@ namespace NetToGXSim2.Core
                     for (int i = 0; i < points; i++) sb.Append(((ushort)wordVals[i]).ToString("X4"));
                     string dataStr = sb.ToString();
                     string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + (dataStr.Length + 4).ToString("X4") + "0000" + dataStr;
-                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Read Word {startDevName} x{points} -> OK ({wordVals[0]})");
+                    short firstVal = wordVals.Length > 0 ? wordVals[0] : (short)0;
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Read Word {startDevName} x{points} -> OK ({firstVal})");
+                    return System.Text.Encoding.ASCII.GetBytes(respStr);
+                }
+            }
+
+            // Batch Write in ASCII: "1401"
+            if (sCommand == "1401" && sPayload.Length >= 24)
+            {
+                string sDevCode = sPayload.Substring(12, 2);
+                string sAddr = sPayload.Substring(14, 6);
+                string sPoints = sPayload.Substring(20, 4);
+
+                int startAddr = Convert.ToInt32(sAddr, 10);
+                int points = Convert.ToInt32(sPoints, 16);
+
+                string devPrefix = ParseAsciiDevCode(sDevCode);
+                string startDevName = GxSimulatorEngine.StepDeviceName(devPrefix + "0", startAddr);
+
+                if (sSubCommand == "0001") // Bit Write
+                {
+                    string bitStr = sPayload.Substring(24);
+                    byte[] bitVals = new byte[points];
+                    for (int i = 0; i < points && i < bitStr.Length; i++)
+                    {
+                        bitVals[i] = (byte)(bitStr[i] == '1' ? 1 : 0);
+                    }
+                    _engine.WriteDeviceBlockBits(startDevName, points, bitVals);
+                    string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + "00040000";
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Write Bit {startDevName} x{points} -> OK");
+                    return System.Text.Encoding.ASCII.GetBytes(respStr);
+                }
+                else // Word Write
+                {
+                    string wordHexStr = sPayload.Substring(24);
+                    short[] wordVals = new short[points];
+                    for (int i = 0; i < points && (i * 4 + 4) <= wordHexStr.Length; i++)
+                    {
+                        wordVals[i] = (short)Convert.ToUInt16(wordHexStr.Substring(i * 4, 4), 16);
+                    }
+                    _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
+                    string respStr = "D000" + sNetNo + sPcNo + sDestIo + sDestStation + "00040000";
+                    LogMessage?.Invoke($"[{Name}] {protoPrefix} [3E ASCII] Write Word {startDevName} x{points} -> OK");
                     return System.Text.Encoding.ASCII.GetBytes(respStr);
                 }
             }
@@ -883,6 +913,27 @@ namespace NetToGXSim2.Core
 
             string subCmd = s.Substring(0, 2);
             RequestsProcessed++;
+
+            // Read Bits "00"
+            if (subCmd == "00")
+            {
+                string sAddr = s.Substring(10, 6);
+                string sPoints = s.Substring(18, 2);
+
+                int startAddr = Convert.ToInt32(sAddr, 10);
+                int points = Convert.ToInt32(sPoints, 16);
+                if (points == 0) points = 256;
+
+                string startDevName = $"M{startAddr}";
+                byte[] bitVals;
+                _engine.ReadDeviceBlockBits(startDevName, points, out bitVals);
+
+                var sb = new System.Text.StringBuilder();
+                sb.Append("8000");
+                for (int i = 0; i < points; i++) sb.Append(bitVals[i] != 0 ? "1" : "0");
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E ASCII] Read Bit {startDevName} x{points} -> OK");
+                return System.Text.Encoding.ASCII.GetBytes(sb.ToString());
+            }
 
             // Read Words "01"
             if (subCmd == "01")
@@ -905,6 +956,47 @@ namespace NetToGXSim2.Core
                 return System.Text.Encoding.ASCII.GetBytes(sb.ToString());
             }
 
+            // Write Bits "02"
+            if (subCmd == "02" && s.Length >= 24)
+            {
+                string sAddr = s.Substring(10, 6);
+                string sPoints = s.Substring(18, 2);
+                string sData = s.Substring(24);
+
+                int startAddr = Convert.ToInt32(sAddr, 10);
+                int points = Convert.ToInt32(sPoints, 16);
+                if (points == 0) points = 256;
+
+                string startDevName = $"M{startAddr}";
+                byte[] bitVals = new byte[points];
+                for (int i = 0; i < points && i < sData.Length; i++) bitVals[i] = (byte)(sData[i] == '1' ? 1 : 0);
+                _engine.WriteDeviceBlockBits(startDevName, points, bitVals);
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E ASCII] Write Bit {startDevName} x{points} -> OK");
+                return System.Text.Encoding.ASCII.GetBytes("8200");
+            }
+
+            // Write Words "03"
+            if (subCmd == "03" && s.Length >= 24)
+            {
+                string sAddr = s.Substring(10, 6);
+                string sPoints = s.Substring(18, 2);
+                string sData = s.Substring(24);
+
+                int startAddr = Convert.ToInt32(sAddr, 10);
+                int points = Convert.ToInt32(sPoints, 16);
+                if (points == 0) points = 256;
+
+                string startDevName = $"D{startAddr}";
+                short[] wordVals = new short[points];
+                for (int i = 0; i < points && (i * 4 + 4) <= sData.Length; i++)
+                {
+                    wordVals[i] = (short)Convert.ToUInt16(sData.Substring(i * 4, 4), 16);
+                }
+                _engine.WriteDeviceBlockWords(startDevName, points, wordVals);
+                LogMessage?.Invoke($"[{Name}] {protoPrefix} [1E ASCII] Write Word {startDevName} x{points} -> OK");
+                return System.Text.Encoding.ASCII.GetBytes("8300");
+            }
+
             return System.Text.Encoding.ASCII.GetBytes("805B");
         }
         #endregion
@@ -921,7 +1013,30 @@ namespace NetToGXSim2.Core
             return true;
         }
 
-        private static string GetA1EDevicePrefix(int devCode)
+        private static string ParseAsciiDevCode(string sDevCode)
+        {
+            string code = sDevCode.Trim().ToUpper();
+            if (code == "D*" || code == "A8") return "D";
+            if (code == "M*" || code == "90") return "M";
+            if (code == "X*" || code == "9C") return "X";
+            if (code == "Y*" || code == "9D") return "Y";
+            if (code == "SM" || code == "91") return "SM";
+            if (code == "SD" || code == "A9") return "SD";
+            if (code == "S*" || code == "98") return "S";
+            if (code == "TN" || code == "C2") return "TN";
+            if (code == "TS" || code == "C1") return "TS";
+            if (code == "TC" || code == "C0") return "TC";
+            if (code == "CN" || code == "C5") return "CN";
+            if (code == "CS" || code == "C4") return "CS";
+            if (code == "CC" || code == "C3") return "CC";
+            if (code == "R*" || code == "AF") return "R";
+            if (code == "ZR" || code == "B0") return "ZR";
+            if (code == "W*" || code == "B4") return "W";
+            if (code == "B*" || code == "A0") return "B";
+            return "D";
+        }
+
+        private static string GetA1EDevicePrefix(int devCode, byte subCommand = 0x01)
         {
             switch (devCode)
             {
@@ -930,15 +1045,51 @@ namespace NetToGXSim2.Core
                 case 0x4D20: case 0x4D: case 0x90: return "M";
                 case 0x4420: case 0x44: case 0xA8: return "D";
                 case 0x5320: case 0x53: case 0x98: return "S";
-                case 0x5420: case 0x54: case 0xC2: case 0xC0: case 0xC1: return "T";
-                case 0x4320: case 0x43: case 0xC5: case 0xC3: case 0xC4: return "C";
-                case 0xB4: return "W";
-                case 0xAF: return "R";
+                case 0x91: return "SM";
+                case 0xA9: return "SD";
+                case 0x5220: case 0x52: case 0xAF: return "R";
                 case 0xB0: return "ZR";
+                case 0xB4: return "W";
+                case 0xA0: return "B";
+                case 0xC1: return "TS";
+                case 0xC0: return "TC";
+                case 0xC2: return "TN";
+                case 0xC4: return "CS";
+                case 0xC3: return "CC";
+                case 0xC5: return "CN";
+                case 0x5420: case 0x54:
+                    // If bit read/write: TS (Contact), else TN (Value)
+                    return (subCommand == 0x00 || subCommand == 0x02) ? "TS" : "TN";
+                case 0x4320: case 0x43:
+                    // If bit read/write: CS (Contact), else CN (Value)
+                    return (subCommand == 0x00 || subCommand == 0x02) ? "CS" : "CN";
                 default: return "D";
             }
         }
 
-        private static string GetQnaDevicePrefix(byte devCode) => GetA1EDevicePrefix(devCode);
+        private static string GetQnaDevicePrefix(byte devCode)
+        {
+            switch (devCode)
+            {
+                case 0x9C: return "X";
+                case 0x9D: return "Y";
+                case 0x90: return "M";
+                case 0x91: return "SM";
+                case 0x98: return "S";
+                case 0xA8: return "D";
+                case 0xA9: return "SD";
+                case 0xAF: return "R";
+                case 0xB0: return "ZR";
+                case 0xB4: return "W";
+                case 0xA0: return "B";
+                case 0xC1: return "TS";
+                case 0xC0: return "TC";
+                case 0xC2: return "TN";
+                case 0xC4: return "CS";
+                case 0xC3: return "CC";
+                case 0xC5: return "CN";
+                default: return "D";
+            }
+        }
     }
 }

@@ -466,12 +466,54 @@ namespace NetToGXSim2.Wpf.Views
         private void BtnClearLog_Click(object sender, RoutedEventArgs e)
         {
             TxtLog.Clear();
+            _logLineCount = 0;
         }
+
+        private const int MaxLogLines = 500;
+        private int _logLineCount = 0;
 
         private void Log(string message)
         {
             string time = DateTime.Now.ToString("HH:mm:ss.fff");
             TxtLog.AppendText($"[{time}] {message}\n");
+            _logLineCount++;
+
+            if (_logLineCount > MaxLogLines)
+            {
+                int excess = _logLineCount - MaxLogLines;
+                try
+                {
+                    if (TxtLog.LineCount > 0)
+                    {
+                        int charIdx = TxtLog.GetCharacterIndexFromLineIndex(excess);
+                        if (charIdx > 0)
+                        {
+                            TxtLog.Select(0, charIdx);
+                            TxtLog.SelectedText = string.Empty;
+                            _logLineCount = TxtLog.LineCount;
+                        }
+                    }
+                    else
+                    {
+                        // Fallback when Tab is unrendered/hidden
+                        string text = TxtLog.Text;
+                        int idx = 0;
+                        for (int k = 0; k < excess; k++)
+                        {
+                            int nextIdx = text.IndexOf('\n', idx);
+                            if (nextIdx < 0) break;
+                            idx = nextIdx + 1;
+                        }
+                        if (idx > 0)
+                        {
+                            TxtLog.Text = text.Substring(idx);
+                            _logLineCount = MaxLogLines;
+                        }
+                    }
+                }
+                catch { }
+            }
+
             TxtLog.ScrollToEnd();
         }
 
